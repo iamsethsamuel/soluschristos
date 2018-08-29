@@ -1,0 +1,14 @@
+{% include "home/index.html" %}
+<p><div class="container">
+<form action="createpost" enctype="multipart/form-data" class="form-group" method="POST">
+    {% csrf_token %}
+    <input name="creator" value="{{user}}" type="hidden" />
+    <p>
+    <textarea name="content" class="form-control" >
+    </textarea>
+    </p>
+    <p><input name="pic" type="file" class=""><br></p>
+    <input type="submit" value="Submit" >
+</form>
+</div>
+</p>

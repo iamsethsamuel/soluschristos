@@ -1,0 +1,8 @@
+{% for post in posts %}
+<a href="{% url 'home:post-detail' post.id %}">
+    <img src="{{post.pic.url}}" class="float-left col-md-9 profilePostPic" />
+</a>
+{% endfor %}
+{% if posts.has_next %}
+    <button class="btn-default" onclick="profilePostsFunc('?profilepost={{posts.next_page_number}}')">Load More</button>
+{% endif %}

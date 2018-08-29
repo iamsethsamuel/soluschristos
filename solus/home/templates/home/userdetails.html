@@ -1,0 +1,19 @@
+{% include "home/index.html" %}
+<div class="container">
+<p>
+<form action="createdetail" enctype="multipart/form-data" class="form-group container-fluid" method="post">
+    {% csrf_token %}
+    <input type="hidden" value="{{user}}" name="user"/>
+    <input class="form-control input" placeholder="Your Phone number" type="tel" name="phone" required /><br>
+    <p><input type="date"  name="dob" required/></p>
+    <input type="text" placeholder="Country" name="country" class="form-control input" required/><br>
+    <input name="stateRegion" placeholder="State or Region" class="form-control input" required/><br>
+    <select name="sex" class="form-control input" required><br>
+        <option>Female</option>
+        <option>Male</option>
+    </select><br>
+    <p><input type="file" placeholder="Select a profile picture" name="dp" required /></p>
+    <input type="submit" class="btn btn-default" value="Submit"/>
+</form>
+</p>
+</div>
