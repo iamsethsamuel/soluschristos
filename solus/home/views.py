@@ -15,16 +15,7 @@ def homepage(request):
             postList.append(Posts.objects.filter(creator=user).order_by("-date"))
         for post in postList:
             for p in post:
-                 page = request.GET["page"]
-    paginator = Paginator(Article.objects.all().order_by("-date"))
-    try:
-        article = paginator.page(page)
-    except PageNotAnInteger:
-        article = paginator.page(1)
-    except EmptyPage:
-        article = paginator.page(1)
-    return render(request, "home/index.html", {"articles": article})
- posts.append(p)
+                posts.append(p)
         paginator = Paginator(posts, 4)
         p_page = request.GET.get("page")
         try:
@@ -37,7 +28,8 @@ def homepage(request):
             return render(request, "home/postAjax.html", {"posts": post})
         else:
             return render(request, "home/posts_list.html", {"posts": post})
-
+    else:
+        return render(request, "home/welcome.html")
 
 def notification(request):
     userSubcribed = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]

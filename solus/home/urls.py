@@ -10,8 +10,8 @@ app_name = "home"
 urlpatterns = [
     path("", views.homepage, name="home"),
     path("signup/", views.signup, name="signup"),
-    path("login/", auth_views.login, {"template_name": "home/login.html"}, name="login"),
-    path("logout/", views.logout, name="logout"),
+    path("login/", auth_views.LoginView.as_view(template_name= "home/login.html"), name="login"),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("comment/<int:post_id>", views.comments, name="post-detail"),
     path("usr/<username>", views.profile, name="profile"),
     path("follow/<userid>", views.createFollow, name="follow"),
