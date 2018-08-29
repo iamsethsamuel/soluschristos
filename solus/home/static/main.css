@@ -1,0 +1,229 @@
+#nav{
+color: white
+}
+#cardpic{
+    display:-webkit-flex;
+    height: 20%;
+    
+}
+.modal{
+    z-index: 1;
+    position:fixed;
+    left: 2%;
+    top: 10%;
+    overflow: auto; 
+    display: none;
+    height: 80%;
+}
+.shift{
+    left: 50%;    
+}
+.post{
+    font-size: 20px;
+    float: right;
+    font-weight: bold;
+}
+#change{
+    display: flex;
+}
+.prev{
+    position: absolute;
+    bottom: 45%;
+    float: left;
+    background-color: gainsboro;
+    opacity: 0.5;
+    z-index: 1000;
+}
+.prev:hover, .next:hover{
+    opacity: 1;
+}
+.next{
+    position: absolute;
+    bottom: 45%;
+    background-color: gainsboro;
+    right: 3.5%;
+    float: right;
+    opacity: 0.5;
+}
+@keyframes slider{
+    0% {transform: rotateY(123deg)};
+    40% {opacity: 0.2;}
+    80% {opacity: .1;}
+    100% {opacity: 1;}
+}
+.postsContainer{
+    padding-bottom: 2%;
+    padding-right: 0%;
+    padding-left: 0%;
+}
+.indicator{
+    color: rgb(163, 145, 145);  
+    position: relative;
+    top: 14%;
+    font-size: 20px;
+    font-weight: bold;
+}
+.postPic{
+    max-height: 720px;
+    animation-name: slider;
+    animation-duration: 3.2;
+}
+.love{
+    height: 50px;
+}
+
+.change{
+    overflow: scroll;
+    height: 300px;
+}
+.logo{
+    font-family: Pacifico;
+}
+.posts{
+    background-color: white;
+    height: 100%;
+}
+
+.profilePostPic{
+    width: 200px;
+    padding-bottom: 5%;
+    padding-left: 1%;
+    margin-left: 0%;
+}
+.profilePostContainer{
+    float: right;
+}
+.input :active{
+    width: 21px;
+}
+#n_indicator{
+    color: wheat;
+}
+.menu{
+    font-size: 27px;
+    text-align: left;
+    padding: 0, 0, 0, 0;
+    margin: 0, 0, 0, 0;
+    border: 0, 0, 0, 0;
+    color: black;
+}
+.menu-item{
+    position: relative;
+}
+
+#postFormTitle{
+    position: relative;
+    top: 4%;
+    color: blue;
+    font-size: 19px;
+    font-family: 'Comic Sans MS';
+}
+@media (max-width: 500px){
+    #modal{
+        position: fixed;
+        top: 13%;
+        width: 100%;
+        background-color: blue;
+    }
+}
+
+#notificationDetails{
+    background-color: blue
+}
+@media(min-width: 400px){
+    #showSearch{
+    display: none;
+}
+}
+
+@media (max-width: 400px){
+     #searchForm{
+         display: none;
+         
+     }
+     #showSearch{
+         display: block;
+     }
+     .report{
+         margin-left: 20%;
+     }
+ }
+ 
+ @media (min-width:500px){
+    .report{
+        position: relative;
+        margin-left: 20%;
+        left: 0px;
+    }
+    
+} 
+.comments{
+    margin-left: 5%;
+}
+.report{
+    float: right;
+    width: 99%;
+    margin-left: 5%;
+}
+.details{
+    position: relative;
+    width: 100%;
+
+}
+.like{
+    float: left;
+    width: 80%;
+}
+.playButton{
+    position: relative;
+    bottom: 50%;
+    left: 50%;
+    z-index: 1000;
+}
+.seek{
+    position: relative;
+    bottom: 90%;
+    left: 90%;
+    color: slategray;
+    background: transparent;
+}
+#navigator{
+    border-left: 30%;
+    margin-right: 30%;
+}
+.mediaContainer{
+    padding: 0 0 0 0;
+}
+.postCommentsContainer{
+    width: 48%;
+    margin-right:100%;
+}
+@media(max-width:500px){
+    .detailDp{
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
+    }
+}
+@media(max-width:500px){
+    .detailContainer{
+        padding: 0 0 0 0;
+        width: 100%;
+    }
+}
+@media(max-width:500px){
+    .detailComment{
+        padding: 10% 10% 10% 10%;
+    }
+}
+#detailClose{
+    top: 20%;
+    z-index: 10000;
+}
+@media(min-width:500px){
+    .detailDp{
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
+    }
+}
