@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/media/uploads/Logo.png" sizes="60x100">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{% block title %} Solus Christos {% endblock %}</title>
+    <!-- <link href="https://unpkg.com/ionicons@4.2.0/dist/css/ionicons.min.css" rel="stylesheet"> -->
+    <!-- <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous"> -->
+    <script src="{% static 'js.cookie.js' %}"></script>
+    <link rel="stylesheet" href="{% static '/css/bootstrap.css' %}">
+    <script src="{% static 'shaka-player/dist/shaka-player.compiled.js' %}"></script>
+    <script src="{% static 'javascript.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'main.css' %}">
+</head>
+<body>
+<div class="sticky-top">
+<nav class="navbar navbar-expand-lg navbar-light " style="background-color:black"></a>
+    <a href="/"><img class="navbar-brand logo navbar-item" src="/media/uploads/Logo.png" width="150px" id="nav"></a>    
+    <form method="post" action="{% url 'home:search' %}" class="form-inline" id="searchForm">
+        {% csrf_token %}
+        <label for="search">Search</label>
+        <input type="text" placeholder="Ask me" name="search" class="form-control navbar-item" id="search" >
+        <input type="submit" value="Search" class="btn btn-outline-secondary navbar-item">  
+    </form>
+    <p class="bavbar-item" onclick="showNotifications()">
+            {% if user.is_authenticated %}
+                <span id="n_indicator">Notifications 
+                    <sup id="notification_length" class="badge badge-danger badge-pill"> </sup></span>
+            {% endif %}     
+        </p>
+    <button id="showSearch" onclick="showSearch()" class="btn btn-secondary">Search</button>
+                <a href="{% url 'home:profile' user.id %}" class="post text-primary">{% if user.is_authenticated %}
+                    <img src="{{user.users.dp.url}}" width="30px" class="navbar-item" height="30px">{{user|title}}{% endif %}</a>
+        {% if not user.is_authenticated %}
+            <a href="/login" class="bange bange-default badge-pill navbar-item">Login</a>
+        {% endif %}
+</nav>
+
+<div id="notificationDetails" style="display:none; position:fixed;width:100%" 
+class=" bg-white">
+{% if user.is_authenticated %}
+    <script>
+          getNotifications()
+      </script>
+{% endif %}
+</div>
+
+<div class="container bg-light change" style="display:none" id="change"></div> 
+</div>
+
+<div class="container-fluid col-md-8 modal bg-light" id="modal">
+      <form action="createpost" method="POST" enctype="multipart/form-data" class="form-group"  id="postForm"> 
+        {% csrf_token %}
+        <span id="postFormTitle" class="text-primary">Create a Post</span>
+        <br>
+        <p class="float-right" onclick="formClose()"><b>X</b></p>
+        <textarea class="form-control" name="content" wrap="off" form="postForm"
+            onfocus="textAreaFunc()" autocapitalize="sentences" spellcheck="true" placeholder="Write a post" id="postContent">
+        </textarea>
+        <p></p>
+        <span id="add" onclick="addPic()" class="btn btn-primary"><b>&plus; Add Media</b></span>
+</form>       
+</div>
+{% block main %}
+
+{% endblock %}
+<script src="{% static 'main.js' %}"></script>
+</body>
+</html>
+<body>

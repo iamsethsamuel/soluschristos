@@ -1,0 +1,27 @@
+{% include "home/index.html" %}
+<p>
+<div>
+    <div>
+        {% if posts %}
+            <h3>Posts</h3>
+            {% for p in posts %}
+            <p>{{p.content}}</p>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div>
+        {% if prof %}
+        <h3>Users</h3>
+        {% endif %}
+        {% for p in prof %}
+            <p>{{p}} </p>
+        {% endfor %}
+    </div>
+    <div>
+        <h4>{{error}}</h4>
+    </div>
+
+</div>
+</p>
+
+

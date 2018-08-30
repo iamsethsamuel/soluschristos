@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Video Player</title>
+        {% load static %}
+        <script src="{% static 'shaka-player/dist/shaka-player.compiled.js' %}"></script>
+    </head>
+<body onload="initPlayer('{{source}}')">
+    <video id="video" autoplay controls width="100%" height="100%" >
+    </video>
+    <script>
+        function initApp(){
+            shaka.polyfill.installAll()
+            if(shaka.Player.isBrowserSupported()){
+                initPlayer()
+            }else{
+                console.log("Unsupported browser");  
+            }
+        }
+        
+        function initPlayer(source){
+            let video = document.getElementById("video")
+            let player = new shaka.Player(video)
+            video.setAttribute("src","http://172.17.0.1:8000/media/uploads/"+source)
+            window.player = player
+            player.addEventListener("error", (err)=>{
+                console.log(err)
+            })
+            player.configure({
+            streaming:{
+                bufferingGoal:10,
+                rebufferingGoal:2
+            }
+        })
+        player.load("http://172.17.0.1:8000/media/uploads/"+source).then(() =>{
+        }).catch((err)=>{
+            console.log(err)
+        })
+        console.log(video)
+        }
+       
+        </script>
+    </body>
+</html>

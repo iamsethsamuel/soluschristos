@@ -1,0 +1,50 @@
+{% extends "home/index.html" %}
+{% if profile.users.first_name %}
+    {% block title %}{{profile.first_name}} {{profile.last_name}}{% endblock %}
+{% endif %}
+{% block main %}
+{% if user.users == "" %}
+    <a href="{% url 'home:create-detail' %}">Update Profile</a>
+{% endif %}
+<table class="container-fluid">
+    <tr>
+        <div class="card">
+            <span class="card-head">
+                <tr><h1 class="">{{profile.username|title}}</h1><br></td>
+                <td><h2>{{profile.first_name}} {{profile.last_name}} </h2><br></td>
+                <td><h3>{{followers}} Followers | {{following}} Following</h3><br></td>
+                <td><h3>From {{profile.users.state_region }} in {{profile.users.country}} </h3<br></td>
+                <td><h4>Year Joined: {{profile.date_joined.year}}</h4></td>
+            </span>
+        </div>
+    </tr>
+</table>
+        {% if alreadyFollowing == user.username %}
+            <a href="{% url 'home:unfollow' profile.id %}">Unfollow</a>
+        {% else %}
+            <a href="{% url 'home:follow' profile.id %}">Follow</a>
+        {% endif %}
+        <div class="card-body">
+
+            <img src="{{profile.users.dp.url}}" class="img-thumbnail col-md-6 profilePagePic"/>            
+            <div class="row">
+                <table class="float-right col-md-5">
+                    <tr>
+                {% for post in posts %}
+                {% if post.pic != "None" %}
+                        <a href="{% url 'home:post-detail' post.id %}">
+                           <td><img src="{{post.pic.url}}" width="150px" height="150px" class="profilePostPic" /></td>
+                        </a>
+                {% endif %}
+                {% endfor %}
+                    </tr>
+                </table>
+
+                {% if posts.has_next %}
+                    <button class="btn-default" onclick="profilePostsFunc('?profilepost={{posts.next_page_number}}')">Load More</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    </div>
+{% endblock %}

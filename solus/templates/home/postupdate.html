@@ -1,0 +1,118 @@
+{% include "home/index.html" %}
+<div class="container-fluid">
+<form onsubmit="postUpdate(event,'{{post.id}}')" method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <textarea type="text" class="form-control"  name="content" placeholder="Write post"></textarea>
+    {% if post.pic9 != "None" %}
+        Currently:
+        {% if post.pic9.url|last != "d" %}
+            <img src="{{post.pic9.url}}" id="pic9{{post.id}}" height=200 width=200 />
+        <p></p>
+        {% else %}
+            <p id="pic9{{post.id}}">{{post.pic9}}</p>
+        {% endif %}
+        <input type="file" name="pic9" accept="image/*, video/* " id="pic9"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic8 != "None" %}
+        Currently:
+        {% if post.pic8.url|last != "d" %}
+            <img src="{{post.pic8.url}}" height=200 width=200 id="pic8{{post.id}}" />
+        <p></p>
+        {% else %}
+            <p id="pic8{{post.id}}">{{post.pic8}}</p>
+        {% endif %}
+        <input type="file" name="pic8" accept="image/*, video/* " alt="{{post.pic8}}" id="pic8"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic7 != "None" %}
+        Currently:
+        {% if post.pic7.url|last != "d" %}
+            <img src="{{post.pic7.url}}" height=200 width=200  id="pic7{{post.id}}" alt="{{post.pic8}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic7{{post.id}}">{{post.pic7}}</p>
+        {% endif %}
+        <input type="file"  name="pic7" accept="image/*, video/* " id="pic7"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic6 != "None" %}
+        Currently:
+        {% if post.pic6.url|last != "d" %}
+            <img src="{{post.pic6.url}}" height=200 width=200 id="pic6{{post.id}}" alt="{{post.pic6}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic6{{post.id}}">{{post.pic6}}</p>
+        {% endif %}
+        <input type="file"  name="pic6" accept="image/*, video/* " id="pic6"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic5 != "None" %}
+        Currently:
+        {% if post.pic5.url|last != "d" %}
+            <img src="{{post.pic5.url}}" height=200 width=200 id="pic5{{post.id}}" alt="{{post.pic5}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic5{{post.id}}">{{post.pic5}}</p>
+        {% endif %}
+        <input type="file" name="pic5" accept="image/*, video/* " id="pic5"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic4 != "None" %}
+        Currently:
+        {% if post.pic4.url|last != "d" %}
+            <img src="{{post.pic4.url}}" height=200 width=200 id="pic4{{post.id}}" alt="{{post.pic4}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic4{{post.id}}">{{post.pic4}}</p>
+        {% endif %}
+        <input type="file"  name="pic4" accept="image/*, video/* " id="pic4"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic3 != "None" %}
+        Currently:
+        {% if post.pic3.url|last != "d" %}
+            <img src="{{post.pic3.url}}" height=200 width=200 id="pic3{{post.id}}" alt="{{post.pic3}}" />
+        <p></p>
+        {% else %}
+            <p id="pic3{{post.id}}">{{post.pic3}}</p>
+        {% endif %}
+        <input type="file"  name="pic3" accept="image/*, video/* " id="pic3"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic2 != "None" %}
+        Currently:
+        {% if post.pic2.url|last != "d" %}
+            <img src="{{post.pic2.url}}" height=200 width=200 id="pic2{{post.id}}" alt="{{post.pic2}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic2{{post.id}}">{{post.pic2}}</p>
+        {% endif %}
+        <input type="file" name="pic2" accept="image/*, video/* " id="pic2" />
+        <p></p>    
+    {% endif %}
+    {% if post.pic1 != "None" %}
+        Currently:
+        {% if post.pic1.url|last != "d" %}
+            <img src="{{post.pic1.url}}" height=200 width=200 id="pic1{{post.id}}" alt="{{post.pic1}}"/>
+        <p></p>
+        {% else %}
+            <p id="pic1{{post.id}}">{{post.pic1}}</p>
+        {% endif %}
+        <input type="file" name="pic1" accept="image/*, video/* " id="pic1"/>
+        <p></p>    
+    {% endif %}
+    {% if post.pic != "None" %}
+        Currently:
+        {% if post.pic.url|last != "d" %}
+            <img src="{{post.pic.url}}" height=200 width=200 id="pic{{post.id}}" alt="{{post.pic}}" />
+        <p></p>
+        {% else %}
+            <p id="pic{{post.id}}">{{post.pic}}</p>
+        {% endif %}
+        <input type="file" name="pic" accept="image/*, video/*" id="pic"/>
+        <p></p>    
+    {% endif %}
+    <input type="submit" value="Post" class="btn btn-primary">
+</form>
+</div>

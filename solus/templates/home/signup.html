@@ -1,0 +1,27 @@
+
+{% extends "home/index.html" %}
+    {% block main %}
+<p>
+<div class="container">
+        <form method="post" enctype="multipart/form-data" class="form-outline">
+            {% csrf_token %}
+            <input name="username" type="text" class="form-control" placeholder="Username" required/><br>
+            <input name="password" type="password" placeholder="Choose an 8 digit password" class="form-control" required><br>
+            <input name="c_password" type="password" placeholder="Confirm password" class="form-control" required><br>
+            <input name="firstName" type="text" placeholder="First name" class="form-control" required><br>
+            <input name="lastName" type="text" placeholder="Last name" class="form-control" required><br>
+            <input name="email" type="email" placeholder="Email" class="form-control" required><br>
+            <input name="phone" type="tel" class="form-control" placeholder="Phone"><br>
+            <p><input name="dob" type="date" required></p>
+            <select name="sex" class="form-control">
+                <option>Female</option>
+                <option>Male</option>
+            </select><br>
+            <input name="country" type="text" class="form-control" placeholder="Country" required ><br>
+            <input name="stateRegion" placeholder="State or Region" class="form-control"><br>
+            <p><input type="file" value="Choose a Profile picture" name="dp" ></p>
+            <button type="submit" class="btn btn-outline-secondary my-2 my-sm-0">Signup</button>
+        </form>
+    </div>
+</p>
+{% endblock %}

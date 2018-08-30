@@ -1,0 +1,27 @@
+{% extends "home/index.html" %}
+{% block title %} Log In {% endblock %}
+    {% block main %}
+<div class="container">
+    
+    <h1>Login</h1>
+    {% for field in form %}
+        {% if field.errors %}
+        {% for error in field.errors %}
+        <span style="color:red">{{ error }}</span> <br />
+        {% endfor %}
+        {% endif %}
+            <br />
+            <br />
+        {% endfor %}
+        <form method="POST" action="{% url 'home:login' %}" class="form-group">
+        {% csrf_token %}
+        <input name="username" autofocus="" maxlength="254" required="" id="id_username" type="text" class="form-control" placeholder="Username"><br>
+        <input name="password" required="" id="id_password" type="password" class="form-control" placeholder="Password"><br>
+        <input type="submit" value="Log in" class="btn btn-secondary">
+        </form>
+    </div>
+    <h3><a href="{% url 'home:signup' %}" class="text-secondary">Or Sign Up</a></h3>
+    {% endblock %}
+</div>
+</body>
+</html>

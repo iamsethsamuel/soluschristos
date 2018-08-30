@@ -1,0 +1,31 @@
+<p>
+<div class="row">
+    <div class="col-sm-9 float-left">
+{% if prof %}
+<h4>Users</h4>
+{% endif %}
+{% for p in prof %}
+    <p>
+        <a href="{% url 'home:profile' p.id %}">   
+            <span><img src="{{p.users.dp.url}}" height="60px" width="60px" /></span>
+            <span>{{p}}</span>
+        </a>
+    </p>
+{% endfor %}
+    </div>
+    <div>
+    <div class="float-right posts">
+        {% if posts %}
+        <h4>Posts</h4>
+        {% endif %}
+    {% for p in posts %}
+    <p>
+        <span><img src="{{p.creator.users.dp.url}}" height="60px" width="60px"/></span>
+        <span>{{p.content}}</span>
+    </p>
+    {% endfor %}
+    </div>
+        <h4>{{error}}</h4>
+    </div>
+</div>
+</p>

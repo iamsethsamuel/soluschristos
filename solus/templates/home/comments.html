@@ -1,0 +1,6 @@
+{% for comment in comments %}
+Post: <p>{{ comment.post }}</p>
+Comments: <p>{{comment.comment }}</p>
+On <p>{{comment.date }}</p>
+By <p>{{ comment.user }}</p>
+{% endfor %}
