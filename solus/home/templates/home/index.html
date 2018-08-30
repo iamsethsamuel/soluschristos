@@ -10,6 +10,7 @@
     <!-- <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous"> -->
     <script src="{% static 'js.cookie.js' %}"></script>
     <link rel="stylesheet" href="{% static '/css/bootstrap.css' %}">
+    <link href="https://fonts.googleapis.com/css?family=Courgette|Lobster" rel="stylesheet">
     <script src="{% static 'shaka-player/dist/shaka-player.compiled.js' %}"></script>
     <script src="{% static 'javascript.js' %}"></script>
     <link rel="stylesheet" href="{% static 'main.css' %}">
@@ -34,7 +35,8 @@
                 <a href="{% url 'home:profile' user.id %}" class="post text-primary">{% if user.is_authenticated %}
                     <img src="{{user.users.dp.url}}" width="30px" class="navbar-item" height="30px">{{user|title}}{% endif %}</a>
         {% if not user.is_authenticated %}
-            <a href="/login" class="bange bange-default badge-pill navbar-item">Login</a>
+            <a href="/login" class="badge badge-dark badge-pill navbar-item" style="font-size: 15px">Login</a>
+            or <a href="/signup" class="badge badge-dark badge-pill navbar-item "  style="font-size: 15px">Signup</a>
         {% endif %}
 </nav>
 
