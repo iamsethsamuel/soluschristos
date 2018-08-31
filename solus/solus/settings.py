@@ -25,7 +25,7 @@ SECRET_KEY = '^7&)nc-c6if)3-pc&9zy9!$(!c4s-b7%vebmn&ib_vd-a7dj4^'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["192.168.122.1", "13.58.77.123", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["13.58.77.123","soluschristos.com"]
 
 
 # Application definition
@@ -87,8 +87,11 @@ WSGI_APPLICATION = 'solus.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'soluschristos',
+        'USER': 'secturbleaz',
+        'PASSWORD':'10101996',
+        'HOST':'localhost'
     }
 }
 
