@@ -10,7 +10,7 @@ class Users(models.Model):
     phone = models.CharField(max_length=13, default=None)
     country = models.CharField(max_length=50,default=None)
     stateRegion = models.CharField(max_length=50, default=None)
-    sex = models.CharField(max_length=5,choices=(("M", "Male"), ("F", "Female"),("O", "Other")))
+    sex = models.CharField(max_length=6)
     def __str__(self):
         return "{}".format(self.user)
 

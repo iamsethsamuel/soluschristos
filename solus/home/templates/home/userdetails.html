@@ -1,18 +1,26 @@
 {% include "home/index.html" %}
 <div class="container">
 <p>
-<form action="createdetail" enctype="multipart/form-data" class="form-group container-fluid" method="post">
+<form action="{% url 'home:update-profile' user.username%}" enctype="multipart/form-data" class="form-group" method="post">
     {% csrf_token %}
-    <input type="hidden" value="{{user}}" name="user"/>
-    <input class="form-control input" placeholder="Your Phone number" type="tel" name="phone" required /><br>
-    <p><input type="date"  name="dob" required/></p>
-    <input type="text" placeholder="Country" name="country" class="form-control input" required/><br>
-    <input name="stateRegion" placeholder="State or Region" class="form-control input" required/><br>
-    <select name="sex" class="form-control input" required><br>
-        <option>Female</option>
-        <option>Male</option>
+    {{date}}
+    <input class="form-control" placeholder="Username" type="text" name="username" value="{{user.username}}" required /><br>
+    <input class="form-control" placeholder="First Name" type="text" name="first_name" value="{{user.first_name}}" /><br>
+    <input class="form-control" placeholder="Last Name" type="text" name="last_name" value="{{user.last_name}}" /><br>
+    <input class="form-control" placeholder="Email" type="email" name="email" value="{{user.email}}" /><br>
+    <input class="form-control" placeholder="Phone Number" type="tel" name="phone" value="{{user.users.phone}}" /><br>
+    <input class="form-control" placeholder="Date of birth" type="date" name="dob"
+    max="{{date}}-01-01" value="{{user.users.dob|date:'Y-m-d'}}" /><br>   
+    <input class="form-control" placeholder="Country" type="text" name="country" value="{{user.users.country}}" /><br>
+    <input class="form-control" placeholder="State or Region" name="stateRegion" value="{{user.users.stateRegion}}" /><br>
+    <select name="sex" class="form-control input" required><br>     
+        {% if user.users.sex == "Male" %}
+            <option selected>Male</option>
+        {% else %}
+            <option selected>Female</option>
+            <option>Male</option>
+        {% endif %}
     </select><br>
-    <p><input type="file" placeholder="Select a profile picture" name="dp" required /></p>
     <input type="submit" class="btn btn-default" value="Submit"/>
 </form>
 </p>

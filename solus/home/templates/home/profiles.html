@@ -4,7 +4,7 @@
 {% endif %}
 {% block main %}
 {% if user.users == "" %}
-    <a href="{% url 'home:create-detail' %}">Update Profile</a>
+    <a href="{% url 'home:update-profile' user.username %}">Update Profile</a>
 {% endif %}
 <table class="container-fluid">
     <tr>

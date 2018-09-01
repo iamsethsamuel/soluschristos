@@ -11,6 +11,7 @@ def homepage(request):
         subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
         postList = []
         posts = []
+        suggested_users(request)
         for user in subSubscribedID:
             postList.append(Posts.objects.filter(creator=user).order_by("-date"))
         for post in postList:
@@ -31,6 +32,17 @@ def homepage(request):
     else:
         return render(request, "home/welcome.html")
 
+def suggested_users(request):
+    subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe",
+                                                                                                   flat=True)]
+    suggestions = []
+    following = []
+    for user in subSubscribedID:
+        following.append(Subscription.objects.get(subscribe=Users.objects.get(user=User.objects.get(id=user))))
+    # for suggestion in subSubscribedID:
+    #     Users.objects.get(user=User.objects.get(id=suggestion), )
+    print(following)
+    return HttpResponse("Ok")
 def notification(request):
     userSubcribed = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
     userSubscribes= []
@@ -87,6 +99,8 @@ def search(request):
     else:
         return redirect('home:index')
 
+
+
 def signup(request):
     from django.contrib.auth import login, authenticate
     if request.method == "POST":
@@ -114,7 +128,8 @@ def signup(request):
             Subscription.objects.create(subscriber=auth_username,subscribe=users)
             return redirect("home:home")
     else:
-        return render(request, 'home/signup.html')
+        import datetime
+        return render(request, 'home/signup.html', {"date":datetime.date.today().year - 14})
 
 def logout(request):
     from django.contrib.auth import logout
@@ -146,6 +161,22 @@ def profile(request, username):
     return render(request, "home/profiles.html", {"posts": post, "followers": followers, "following": following,
                                                   "profile": profile, "subscribe": subscribe,"alreadyFollowing":
                                                   allreadyFollowing})
+def update_profile(request, username):
+    import datetime
+    if request.method == "POST":
+        def posted(item):
+            if item:
+                return item
+            else:
+                return ""
+
+        User.objects.filter(username=username).update(first_name=posted(request.POST['first_name']), last_name=posted(
+            request.POST['last_name']), email=posted(request.POST['email']))
+        Users.objects.filter(user=User.objects.get(username=username)).update(dob=posted(request.POST['dob']),stateRegion
+        =posted(request.POST['stateRegion']), country=posted(request.POST['country']), sex=posted(request.POST['sex']))
+        return redirect("home:profile",username)
+
+    return render(request, 'home/userdetails.html', {"date": datetime.date.today().year - 14})
 
 def createFollow(request,userid):
     user = User.objects.get(id=userid)

@@ -16,6 +16,7 @@ urlpatterns = [
     path("usr/<username>", views.profile, name="profile"),
     path("follow/<userid>", views.createFollow, name="follow"),
     path("unfollow/<userid>",views.unFollow,name="unfollow"),
+    path("updateprofile/<username>", views.update_profile,name="update-profile"),
     path("q/search", views.search, name="search"),
     path("createcomment", views.createComment, name="create-comment"),
     path("createlike", views.createLike, name="create-like"),
@@ -29,6 +30,7 @@ urlpatterns = [
     path("userpic/<int:id>",views.profilePic,name="profilepic"),
     path("play/<vid>",views.playVideo),
     path("notifications/", views.notification),
+
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
