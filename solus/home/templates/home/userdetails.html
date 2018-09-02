@@ -3,7 +3,6 @@
 <p>
 <form action="{% url 'home:update-profile' user.username%}" enctype="multipart/form-data" class="form-group" method="post">
     {% csrf_token %}
-    {{date}}
     <input class="form-control" placeholder="Username" type="text" name="username" value="{{user.username}}" required /><br>
     <input class="form-control" placeholder="First Name" type="text" name="first_name" value="{{user.first_name}}" /><br>
     <input class="form-control" placeholder="Last Name" type="text" name="last_name" value="{{user.last_name}}" /><br>

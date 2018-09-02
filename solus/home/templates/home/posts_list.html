@@ -31,7 +31,7 @@
                     </div>
                     <div class="row">
                         <img src="{{p.creator.users.dp.url}}" class="float-left img-thumbnail" id="cardpic" style="width:20%"/>
-                        <a href="{% url 'home:profile' p.creator.id %}" class="col-md-3">
+                        <a href="{% url 'home:profile' p.creator.username %}" class="col-md-3">
                         <p >{{ p.creator|title }} </p>
                         </a>
                         <span class="col-md-4">{% if p.date|timesince|first == "0" %} Just now {% else %}{{p.date|timesince}} ago{% endif %} </span>            

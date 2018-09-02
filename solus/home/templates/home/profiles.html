@@ -3,20 +3,17 @@
     {% block title %}{{profile.first_name}} {{profile.last_name}}{% endblock %}
 {% endif %}
 {% block main %}
-{% if user.users == "" %}
-    <a href="{% url 'home:update-profile' user.username %}">Update Profile</a>
+
+{% if username == user.username %}
+    <a href="{% url 'home:update-profile' user.username %}" style="font-size:15px" class="badge badge-secondary badge-pill">Update Profile</a>
 {% endif %}
 <table class="container-fluid">
-    <tr>
-        <div class="card">
-            <span class="card-head">
-                <tr><h1 class="">{{profile.username|title}}</h1><br></td>
-                <td><h2>{{profile.first_name}} {{profile.last_name}} </h2><br></td>
-                <td><h3>{{followers}} Followers | {{following}} Following</h3><br></td>
-                <td><h3>From {{profile.users.state_region }} in {{profile.users.country}} </h3<br></td>
-                <td><h4>Year Joined: {{profile.date_joined.year}}</h4></td>
-            </span>
-        </div>
+    <tr class="card" style="font-size:25px">
+                <td class="col-md-2" >{{profile.username}}</h1></td>
+                <td class="col-md-2">{{profile.first_name}} {{profile.last_name}} </h2></td>
+                <td class="col-md-2">{{followers}} Followers | {{following}} Following</h3></td>
+                <td class="col-md-2">From {{profile.users.stateRegion }} in {{profile.users.country}}</h3></td>
+                <td class="col-md-2">Year Joined: {{profile.date_joined.year}}</h4></td>
     </tr>
 </table>
         {% if alreadyFollowing == user.username %}

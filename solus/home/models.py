@@ -40,6 +40,7 @@ class Subscription(models.Model):
     subscribe = models.ForeignKey(User, on_delete=models.CASCADE)
     subscriber = models.CharField(max_length=200, default="None")
     date = models.DateField(auto_now_add=True)
+
     def __str__(self):
         return "Subcribe: {} {}".format(self.subscribe,self.subscriber)
 
@@ -48,7 +49,8 @@ class Subscription(models.Model):
 
 
 class Like(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.CharField(max_length=200, default="None")
+    postCreator = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
     post = models.ForeignKey(Posts, on_delete=models.CASCADE)
     date = models.DateTimeField(auto_now_add=True)
 
@@ -74,8 +76,8 @@ class Comment(models.Model):
 class Notifications(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     date = models.DateTimeField(auto_now_add=True)
-    notified_user = models.CharField(max_length=50, default="None")
-    item = models.CharField(max_length=20)
+    notified_user = models.TextField(max_length=200, default="None")
+    item = models.CharField(max_length=100)
     post = models.TextField(default="None")
     comment = models.TextField(default="None")
     like = models.TextField(default="None")

@@ -2,16 +2,16 @@ from django.shortcuts import render, redirect
 from .models import *
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from . forms import *
-from django.http import Http404,HttpResponse
+from django.http import HttpResponseNotFound,HttpResponse
 from django.core.serializers import serialize
-
+from django.core.mail import send_mail
 
 def homepage(request):
     if request.user.is_authenticated:
         subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
         postList = []
         posts = []
-        suggested_users(request)
+        # suggested_users(request)
         for user in subSubscribedID:
             postList.append(Posts.objects.filter(creator=user).order_by("-date"))
         for post in postList:
@@ -36,13 +36,16 @@ def suggested_users(request):
     subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe",
                                                                                                    flat=True)]
     suggestions = []
-    following = []
+    following = [Users.objects.filter(stateRegion=request.user.users.stateRegion).exclude(
+             user=request.user)]
     for user in subSubscribedID:
-        following.append(Subscription.objects.get(subscribe=Users.objects.get(user=User.objects.get(id=user))))
-    # for suggestion in subSubscribedID:
-    #     Users.objects.get(user=User.objects.get(id=suggestion), )
-    print(following)
+            following.append(Subscription.objects.filter(subscribe=User.objects.get(id=user))
+                .exclude(subscriber=request.user))
+    for suggestion in following:
+         suggestions.insert(0, suggestion)
+    print(suggestions)
     return HttpResponse("Ok")
+
 def notification(request):
     userSubcribed = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
     userSubscribes= []
@@ -100,9 +103,9 @@ def search(request):
         return redirect('home:index')
 
 
-
 def signup(request):
     from django.contrib.auth import login, authenticate
+    from django.core.mail import send_mail
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
@@ -116,51 +119,73 @@ def signup(request):
         stateRegion = request.POST.get("stateRegion")
         dp = request.FILES.get("dp")
         sex = request.POST.get("sex")
+        message = "<html> <head><link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/boo" \
+            "tstrap.min.css' integrity='sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u'" \
+            " crossorigin='anonymous'> </head>" \
+            "<h2> Welcome {} {} to Solus Christos I hope you enjoy your time with us.</h2>" \
+            "<p>To confirm your account user this link <a href='http:www.soluschristos.com/{}/{} class='badge " \
+            "badge-secondary badge-pill> Confirm</a>" \
+            "</p> </body>"
+        mail_sent = send_mail("Solus Christos Signup",message=message, html_message=message, from_email="soluschristos0@gmail.com",
+                                  recipient_list=[email])
         if c_password == password:
-            auth_username = request.POST.get("username")
-            auth_password = request.POST.get("password")
-            User.objects.create_user(username=username,password=password,email=email, first_name=firstName,last_name=lastName)
-            users = User.objects.get(username=username)
-            Users.objects.create(user=users, dob=dob, phone=phone, country=country, stateRegion=stateRegion,
-                                 dp=dp, sex=sex)
-            user = authenticate(request, username=auth_username, password=auth_password)
-            login(request,user)
-            Subscription.objects.create(subscriber=auth_username,subscribe=users)
-            return redirect("home:home")
+
+            if mail_sent == 1:
+                auth_username = request.POST.get("username")
+                auth_password = request.POST.get("password")
+                User.objects.create_user(username=username,password=password,email=email, first_name=firstName,last_name=lastName)
+                users = User.objects.get(username=username)
+                Users.objects.create(user=users, dob=dob, phone=phone, country=country, stateRegion=stateRegion,
+                                     is_active=False, dp=dp, sex=sex)
+                user = authenticate(request, username=auth_username, password=auth_password)
+                login(request,user)
+                Subscription.objects.create(subscriber=auth_username, subscribe=users)
+
+                return redirect("home:home")
+            else:
+                return HttpResponse("Failed")
     else:
         import datetime
         return render(request, 'home/signup.html', {"date":datetime.date.today().year - 14})
+
 
 def logout(request):
     from django.contrib.auth import logout
     logout(request)
     return redirect("home:login")
 
+
 def profile(request, username):
-    userid = User.objects.get(username=username).id
-    profile = User.objects.get(username=username)
-    followers = Subscription.objects.filter(subscribe= userid).count()
-    user = User.objects.get(id = userid)
-    following = Subscription.objects.filter(subscriber=user).count()
-    raw_posts = Posts.objects.filter(creator_id=userid).order_by("-date")
-    if Subscription.objects.filter(subscriber=request.user, subscribe=userid):
-        allreadyFollowing = Subscription.objects.get(subscriber=request.user, subscribe=userid).subscriber
-    else:
-        allreadyFollowing =""
-    paginator = Paginator(raw_posts, 10)
-    page = request.GET.get("profilepost")
-    subscribe = Subscription.objects.filter(subscriber=request.user)
     try:
-        post = paginator.get_page(page)
-    except PageNotAnInteger:
-        post = paginator.get_page(1)
-    except EmptyPage:
-        post = paginator.get_page(1)
-    if request.is_ajax():
-        return render(request, "home/profileajax.html", {"posts": post})
-    return render(request, "home/profiles.html", {"posts": post, "followers": followers, "following": following,
-                                                  "profile": profile, "subscribe": subscribe,"alreadyFollowing":
-                                                  allreadyFollowing})
+        userid = User.objects.get(username=username).id
+        profile = User.objects.get(username=username)
+        followers = Subscription.objects.filter(subscribe= userid).count()
+        user = User.objects.get(id = userid)
+        following = Subscription.objects.filter(subscriber=user).count()
+        raw_posts = Posts.objects.filter(creator_id=userid).order_by("-date")
+        if Subscription.objects.filter(subscriber=request.user, subscribe=userid):
+            allreadyFollowing = Subscription.objects.get(subscriber=request.user, subscribe=userid).subscriber
+        else:
+            allreadyFollowing =""
+        paginator = Paginator(raw_posts, 10)
+        page = request.GET.get("profilepost")
+        subscribe = Subscription.objects.filter(subscriber=request.user)
+        try:
+            post = paginator.get_page(page)
+        except PageNotAnInteger:
+            post = paginator.get_page(1)
+        except EmptyPage:
+            post = paginator.get_page(1)
+        if request.is_ajax():
+            return render(request, "home/profileajax.html", {"posts": post})
+        return render(request, "home/profiles.html", {"posts": post, "followers": followers, "following": following,
+                                                      "profile": profile, "subscribe": subscribe,"alreadyFollowing":
+
+                                                      allreadyFollowing, "username":username})
+    except User.DoesNotExist:
+        return HttpResponseNotFound("<h1>Page Not Found</h1>")
+
+
 def update_profile(request, username):
     import datetime
     if request.method == "POST":
@@ -169,32 +194,38 @@ def update_profile(request, username):
                 return item
             else:
                 return ""
-
-        User.objects.filter(username=username).update(first_name=posted(request.POST['first_name']), last_name=posted(
-            request.POST['last_name']), email=posted(request.POST['email']))
+        Subscription.objects.filter(subscribe=User.objects.get(username=request.user), subscriber=request.user.username)
+        User.objects.filter(username=request.user.username).update(first_name=posted(request.POST['first_name']),
+                            last_name=posted(request.POST['last_name']), email=posted(request.POST['email']))
         Users.objects.filter(user=User.objects.get(username=username)).update(dob=posted(request.POST['dob']),stateRegion
         =posted(request.POST['stateRegion']), country=posted(request.POST['country']), sex=posted(request.POST['sex']))
-        return redirect("home:profile",username)
+
+        return redirect("home:profile", username)
 
     return render(request, 'home/userdetails.html', {"date": datetime.date.today().year - 14})
 
-def createFollow(request,userid):
+
+def createFollow(request, userid):
     user = User.objects.get(id=userid)
     Subscription.objects.create(subscribe=user, subscriber=request.user)
     Notifications.objects.create(user=request.user, item="{} has stated following you".format(str(user.username).title()),
-                                 notified_user=user)
-    return redirect("home:profile", user.id)
+                                 notified_user=user.username)
+    print(user)
+    return redirect("home:profile", user.username)
+
 
 def unFollow(request,userid):
     user = User.objects.get(id=userid)
     Subscription.objects.get(subscribe=user, subscriber=request.user).delete()
-    Notifications.objects.get(user=request.user, item="{} stated following you".format(str(user.username).title()),
-                                 notified_user=user).delete()
-    return redirect("home:profile", user.id)
+    # Notifications.objects.get(user=request.user, item="{} stated following you".format(str(user.username).title()),
+    #                              notified_user=user).delete()
+    return redirect("home:profile", user.username)
+
 
 def comments(request, post_id):
     comment = Comment.objects.filter(post_id=post_id).order_by("-date")
     return render(request, "home/comments.html", {"comments": comment})
+
 
 def createComment(request):
     if request.method == "POST":
@@ -208,16 +239,18 @@ def createComment(request):
     else:
         return redirect("/")
 
+
 def createLike(request):
     if request.method == "POST":
         formPost = request.POST["post"]
         post = Posts.objects.get(id=formPost)
         Like.objects.create(post=post, user=request.user)
-        Notifications.objects.create(item="{} has liked liked your post".format(str(request.user).title()),
+        Notifications.objects.create(item="{} has liked your post".format(str(request.user).title()),
                                      user=request.user, notified_user=post.creator)
         return HttpResponse("Success")
     else:
         return redirect("/")
+
 
 def unLike(request):
     if request.method == "POST":
@@ -229,6 +262,7 @@ def unLike(request):
         return HttpResponse("Sucess")
     else:
         return redirect("/")
+
 
 def createPost(request):
     if request.method == "GET":
@@ -249,6 +283,7 @@ def createPost(request):
         pic9 = request.FILES.get("pic9")
         import re
         import os
+
         def ffmpeg(file):
             import subprocess
             import shlex
@@ -430,11 +465,11 @@ def createPost(request):
                 pass
         else:
             post = Posts.objects.create(creator=creator,content=content)
-            Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(request.user))
-        print(request.POST)
+            Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(str(request.user)
+                                                                                                   .title()))
         return redirect("home:home")
     else:
-        return render(request,'home/posts_form.html')
+        return render(request, 'home/posts_form.html')
 
 def postDetails(request, post_id):
     import datetime
@@ -661,6 +696,7 @@ def updatePost(request, id):
         post = Posts.objects.get(id=id)
         return render(request, "home/postupdate.html", {"post": post})
 
+
 def postInfo(request, post):
     likes = Like.objects.filter(post=post).count()
     comments = Comment.objects.filter(post=post).count()
@@ -671,13 +707,16 @@ def postInfo(request, post):
         res = False
     return HttpResponse("{} {} Comments {}".format(likes, comments, res))
 
+
 def profilePic(request,id):
     import json
     j = serialize("json",Users.objects.filter(user=id))
     return HttpResponse(json.loads(json.dumps(j)),content_type="application/json")
 
+
 def playVideo(request, vid):
     return render(request, "home/video.html", {"source":vid})
+
 
 def createReport(request):
     if request.method == "POST":

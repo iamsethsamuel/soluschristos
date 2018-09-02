@@ -6,7 +6,7 @@
 {% endif %}
 {% for p in prof %}
     <p>
-        <a href="{% url 'home:profile' p.id %}">   
+        <a href="{% url 'home:profile' p.username %}">   
             <span><img src="{{p.users.dp.url}}" height="60px" width="60px" /></span>
             <span>{{p}}</span>
         </a>

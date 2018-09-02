@@ -21,19 +21,20 @@
     <a href="/"><img class="navbar-brand logo navbar-item" src="/media/uploads/Logo.png" width="150px" id="nav"></a>    
     <form method="post" action="{% url 'home:search' %}" class="form-inline" id="searchForm">
         {% csrf_token %}
-        
+        <label for="search">Search</label>
         <input type="text" placeholder="Ask me" name="search" class="form-control navbar-item" id="search" >
         <input type="submit" value="Search" class="btn btn-outline-secondary navbar-item">  
     </form>
     <p class="bavbar-item" onclick="showNotifications()">
             {% if user.is_authenticated %}
-                <span id="n_indicator">Notifications 
+                <span id="n_indicator" class="badge badge-pill navbar-item" style="font-size:15px">Notifications 
                     <sup id="notification_length" class="badge badge-danger badge-pill"> </sup></span>
             {% endif %}     
         </p>
     <button id="showSearch" onclick="showSearch()" class="btn btn-secondary">Search</button>
-                <a href="{% url 'home:profile' user.username %}" class="post text-primary">{% if user.is_authenticated %}
-                    <img src="{{user.users.dp.url}}" width="30px" class="navbar-item" height="30px">{{user|title}}{% endif %}</a>
+                <a href="{% url 'home:profile' user.id %}" class="post text-primary">{% if user.is_authenticated %}
+                    <img src="{{user.users.dp.url}}" width="30px" class="navbar-item " height="30px">
+                    <span class="badge badge-pill" style="background-color:black; color:white;font-size:20px;">{{user|title}}</span>{% endif %}</a>
         {% if not user.is_authenticated %}
             <a href="/login" class="badge badge-dark badge-pill navbar-item" style="font-size: 15px">Login</a>
             or <a href="/signup" class="badge badge-dark badge-pill navbar-item "  style="font-size: 15px">Signup</a>
