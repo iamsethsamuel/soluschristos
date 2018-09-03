@@ -21,7 +21,6 @@
     <a href="/"><img class="navbar-brand logo navbar-item" src="/media/uploads/Logo.png" width="150px" id="nav"></a>    
     <form method="post" action="{% url 'home:search' %}" class="form-inline" id="searchForm">
         {% csrf_token %}
-        <label for="search">Search</label>
         <input type="text" placeholder="Ask me" name="search" class="form-control navbar-item" id="search" >
         <input type="submit" value="Search" class="btn btn-outline-secondary navbar-item">  
     </form>
