@@ -124,14 +124,12 @@ def signup(request):
             User.objects.create_user(username=username,password=password,email=email, first_name=firstName,last_name=lastName)
             users = User.objects.get(username=username)
             Users.objects.create(user=users, dob=dob, phone=phone, country=country, stateRegion=stateRegion,
-                                    is_active=False, dp=dp, sex=sex)
+                                    dp=dp, sex=sex)
             user = authenticate(request, username=auth_username, password=auth_password)
             login(request,user)
             Subscription.objects.create(subscriber=auth_username, subscribe=users)
 
             return redirect("home:home")
-            else:
-                return HttpResponse("Failed")
     else:
         import datetime
         return render(request, 'home/signup.html', {"date":datetime.date.today().year - 14})
