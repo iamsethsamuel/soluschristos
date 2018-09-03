@@ -105,7 +105,6 @@ def search(request):
 
 def signup(request):
     from django.contrib.auth import login, authenticate
-    from django.core.mail import send_mail
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
@@ -119,29 +118,18 @@ def signup(request):
         stateRegion = request.POST.get("stateRegion")
         dp = request.FILES.get("dp")
         sex = request.POST.get("sex")
-        message = "<html> <head><link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/boo" \
-            "tstrap.min.css' integrity='sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u'" \
-            " crossorigin='anonymous'> </head>" \
-            "<h2> Welcome {} {} to Solus Christos I hope you enjoy your time with us.</h2>" \
-            "<p>To confirm your account user this link <a href='http:www.soluschristos.com/{}/{} class='badge " \
-            "badge-secondary badge-pill> Confirm</a>" \
-            "</p> </body>"
-        mail_sent = send_mail("Solus Christos Signup",message=message, html_message=message, from_email="soluschristos0@gmail.com",
-                                  recipient_list=[email])
         if c_password == password:
+            auth_username = request.POST.get("username")
+            auth_password = request.POST.get("password")
+            User.objects.create_user(username=username,password=password,email=email, first_name=firstName,last_name=lastName)
+            users = User.objects.get(username=username)
+            Users.objects.create(user=users, dob=dob, phone=phone, country=country, stateRegion=stateRegion,
+                                    is_active=False, dp=dp, sex=sex)
+            user = authenticate(request, username=auth_username, password=auth_password)
+            login(request,user)
+            Subscription.objects.create(subscriber=auth_username, subscribe=users)
 
-            if mail_sent == 1:
-                auth_username = request.POST.get("username")
-                auth_password = request.POST.get("password")
-                User.objects.create_user(username=username,password=password,email=email, first_name=firstName,last_name=lastName)
-                users = User.objects.get(username=username)
-                Users.objects.create(user=users, dob=dob, phone=phone, country=country, stateRegion=stateRegion,
-                                     is_active=False, dp=dp, sex=sex)
-                user = authenticate(request, username=auth_username, password=auth_password)
-                login(request,user)
-                Subscription.objects.create(subscriber=auth_username, subscribe=users)
-
-                return redirect("home:home")
+            return redirect("home:home")
             else:
                 return HttpResponse("Failed")
     else:
