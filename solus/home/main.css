@@ -132,8 +132,9 @@ color: white
 }
 @media(min-width: 400px){
     #showSearch{
-    display: none;
-}
+        display: none;
+    }
+
 }
 
 @media (max-width: 400px){
@@ -147,15 +148,33 @@ color: white
      .report{
          margin-left: 20%;
      }
+     .suggested-img{
+        width: 400px;
+        height: 150px;
+    }
+    .suggested-img-td{
+        width: 300px;
+    }
  }
- 
+ .suggested-img-container{
+     overflow:scroll;
+    }
  @media (min-width:500px){
+    .suggested-img-td{
+        height: 200px;
+    }
     .report{
         position: relative;
         margin-left: 20%;
         left: 0px;
     }
-    
+    .suggested-img-container{
+        height: 310px;
+    }
+    .suggested-img {
+        width: 173px;
+        height: 173px;
+    }
 } 
 .comments{
     margin-left: 5%;

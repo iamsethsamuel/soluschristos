@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Tutorial: Upgrade Guide, v2.2 => v2.4</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+
+    <section>
+
+<!--
+<header>
+    
+
+    <h2>Upgrade Guide, v2.2 => v2.4</h2>
+</header>
+-->
+
+<article>
+    <h1>Shaka Upgrade Guide, v2.2 =&gt; v2.4</h1>
+<p>This is a detailed guide for upgrading from Shaka Player v2.2 to v2.4.
+Feel free to skim or to search for the class and method names you are using in
+your application.</p>
+<h4>What's New in v2.4?</h4>
+<p>Shaka v2.4 introduces several improvements over v2.2, including:</p>
+<ul>
+<li>Support for HLS live streams</li>
+<li>Support for HLS VOD streams that do not start at t=0</li>
+<li>MPEG-2 TS content can be transmuxed to MP4 for playback on all browsers</li>
+<li>Captions are not streamed until they are shown</li>
+<li>Use NetworkInformation API to get initial bandwidth estimate</li>
+<li>The demo app is now a Progressive Web App (PWA) and can be used offline</li>
+<li>Support for CEA captions in TS content</li>
+<li>Support for TTML and VTT regions</li>
+<li>A video element is no longer required when <code>Player</code> is constructed</li>
+<li>New <code>attach()</code> and <code>detach()</code> methods have been added to <code>Player</code> to manage
+attachment to video elements</li>
+<li>Fetch is now preferred over XHR when available</li>
+<li>Network requests are now abortable</li>
+<li>Live stream playback can begin at a negative offset from the live edge</li>
+</ul>
+<h4>Promise polyfill for IE</h4>
+<p>Prior to v2.4, we had our own polyfill of <code>Promise</code> for IE 11 support.  In v2.4,
+we have dropped that polyfill.  To support IE 11 in your application, you MUST
+install a <code>Promise</code> polyfill separately.  We recommend <a href="https://github.com/lahmatiy/es6-promise-polyfill">es6-promise-polyfill</a>
+for that purpose.</p>
+<h4>HLS start time configuration</h4>
+<p>For VOD HLS content which does not start at t=0, v2.2 had a configuration called
+<code>manifest.hls.defaultTimeOffset</code> which applications could use to inform us of
+the correct start time for content.</p>
+<p>This has been removed in v2.4.  The start time of HLS content can now be
+automatically extracted from the segments themselves.  No configuration is
+necessary.</p>
+<h4>Text parser API changes</h4>
+<p>The text-parsing plugin API has changed. Plugins now take a <code>Uint8Array</code> instead
+of an <code>ArrayBuffer</code> like in v2.2. This allowed us to optimize and prevent buffer
+copies.</p>
+<pre class="prettyprint source lang-js"><code>// v2.2
+/**
+ * @param {!ArrayBuffer} data
+ * @param {shakaExtern.TextParser.TimeContext} timeContext
+ * @return {!Array.&lt;!shaka.text.Cue>}
+ */
+MyTextParser.prototype.parseMedia = function(data, timeContext) {};
+
+// v2.4
+/**
+ * @param {!Uint8Array} data
+ * @param {shakaExtern.TextParser.TimeContext} timeContext
+ * @return {!Array.&lt;!shaka.text.Cue>}
+ */
+MyTextParser.prototype.parseMedia = function(data, timeContext) {};
+</code></pre>
+<p>Additionally, the <code>segmentStart</code> attribute of <code>timeContext</code> is now
+nullable.  Your plugin will receive a <code>segmentStart</code> of <code>null</code> if the
+information is not available, as is the case in HLS.</p>
+<p>Text-parsing plugins that produce region information will need to be updated to
+use the new <code>shaka.text.CueRegion</code> class.  The new structure allows for more
+accurate representation of both TTML and VTT regions.</p>
+<p>All application-specific text-parsing plugins MUST to be updated.
+v2.4 does not have backward compatibility for this!</p>
+<p>See shaka.extern.TextParser.prototype.parseInit and
+shaka.extern.TextParser.prototype.parseMedia for details.</p>
+<h4>Text displayer plugin API changes</h4>
+<p>The TextDisplayer plugin API has changed.</p>
+<p>TextDisplayer plugins need to handle changes to the <code>shakaExtern.CueRegion</code>
+structure.  The new structure allows for more accurate representation of both
+TTML and VTT regions.</p>
+<p>All application-specific TextDisplayer plugins MUST to be updated.
+v2.4 does not have backward compatibility for this!</p>
+<p>See <a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a> for details.</p>
+<h4>Offline storage API changes</h4>
+<p>In v2.2, the <code>remove()</code> method on <code>shaka.offline.Storage</code> took an instance of
+<code>StoredContent</code> as an argument.  Now, in v2.4, it takes a the <code>offlineUri</code> field
+from <code>StoredContent</code> as an argument.</p>
+<p>All applications which use offline storage MUST update to the new API.
+The old argument was deprecated in v2.3 and has been removed in v2.4.</p>
+<pre class="prettyprint source lang-js"><code>// v2.2:
+storage.list().then(function(storedContentList) {
+  var someContent = storedContentList[someIndex];
+  storage.remove(someContent);
+});
+
+// v2.4:
+storage.list().then(function(storedContentList) {
+  var someContent = storedContentList[someIndex];
+  storage.remove(someContent.offlineUri);
+});
+</code></pre>
+<h4>Retry after streaming failure</h4>
+<p>In v2.1.3, we introduced a new config called
+<code>streaming.infiniteRetriesForLiveStreams</code> to control retry behavior for live
+streams.  In v2.2, we added a more flexible callback mechanism to specify retry
+behavior for all kinds of streams.</p>
+<pre class="prettyprint source lang-js"><code>// v2.1
+player.configure({
+  streaming: {
+    infiniteRetriesForLiveStreams: true  // the default
+  }
+});
+
+// v2.4
+player.configure({
+  streaming: {
+    failureCallback: function(error) {
+      // Always retry live streams:
+      if (player.isLive()) player.retryStreaming();
+    }
+  }
+});
+
+
+// v2.1
+player.configure({
+  streaming: {
+    infiniteRetriesForLiveStreams: false  // do not retry live
+  }
+});
+
+// v2.4
+player.configure({
+  streaming: {
+    failureCallback: function(error) {
+      // Do nothing, and we will stop trying to stream the content.
+    }
+  }
+});
+</code></pre>
+<p>The <code>streaming.infiniteRetriesForLiveStreams</code> config was deprecated in v2.2 and
+removed in v2.3.</p>
+<p>The <code>player.retryStreaming()</code> method can be used to retry after a failure.
+You can base the decision on <code>player.isLive()</code>, <code>error.code</code>, or anything else.
+Because you can call <code>retryStreaming()</code> at any time, you can also delay the
+decision until you get feedback from the user, the browser is back online, etc.</p>
+<p>A few more examples of possible failure callbacks:</p>
+<pre class="prettyprint source lang-js"><code>function neverRetryCallback(error) {}
+
+function alwaysRetryCallback(error) {
+  player.retryStreaming();
+}
+
+function retryOnSpecificHttpErrorsCallback(error) {
+  if (error.code == shaka.util.Error.Code.BAD_HTTP_STATUS) {
+    var statusCode = error.data[1];
+    var retryCodes = [ 502, 503, 504, 520 ];
+    if (retryCodes.indexOf(statusCode) >= 0) {
+      player.retryStreaming();
+    }
+  }
+}
+</code></pre>
+<p>If you choose to react to <code>error</code> events instead of the failure callback, you
+can use <code>event.preventDefault()</code> to avoid the callback completely:</p>
+<pre class="prettyprint source lang-js"><code>player.addEventListener('error', function(event) {
+  // Custom logic for error events
+  if (player.isLive() &&
+      event.error.code == shaka.util.Error.Code.BAD_HTTP_STATUS) {
+    player.retryStreaming();
+  }
+
+  // Do not invoke the failure callback for this event
+  event.preventDefault();
+});
+</code></pre>
+<h4>Language and role selection</h4>
+<p>In addition to the language methods introduced in v2.1, v2.4 adds additional
+methods for dealing with roles: <code>getAudioLanguagesAndRoles()</code> and
+<code>getTextLanguagesAndRoles()</code>.  These return language/role combinations in an
+object.  You can specify a role in an optional second argument to the language
+selection methods.</p>
+<pre class="prettyprint source lang-js"><code>// v2.4:
+var languagesAndRoles = player.getAudioLanguagesAndRoles();
+
+for (var i = 0; i &lt; languagesAndRoles.length; ++i) {
+  var combo = languagesAndRoles[i];
+  if (someSelector(combo)) {
+    player.selectAudioLanguage(combo.language, combo.role);
+    break;
+  }
+}
+</code></pre>
+<h4>NetworkingEngine API changes</h4>
+<p>In v2.2, the <code>request()</code> method on <code>shaka.net.NetworkingEngine</code> returned a
+Promise.  Now, in v2.4, it returns an instance of
+<code>shakaExtern.IAbortableOperation</code>, which contains a Promise.</p>
+<p>All applications which make application-level requests via <code>NetworkingEngine</code>
+SHOULD update to the new API.  Support for the old API will be removed in v2.5.</p>
+<pre class="prettyprint source lang-js"><code>// v2.2:
+player.getNetworkingEngine().request(type, request).then((response) => {
+  // ...
+});
+
+// v2.4:
+let operation = player.getNetworkingEngine().request(type, request);
+// Use operation.promise to get the response.
+operation.promise.then((response) => {
+  // ...
+});
+// The operation can also be aborted on some condition.
+onSomeOtherCondition(() => {
+  operation.abort();
+});
+</code></pre>
+<p>Backward compatibility is provided in the v2.4 releases by adding <code>.then</code> and
+<code>.catch</code> methods to the return value from <code>request()</code>.</p>
+<h4>Network scheme plugin API changes</h4>
+<p>In v2.4, we changed the API for network scheme plugins.</p>
+<p>These plugins now return an instance of <code>shakaExtern.IAbortableOperation</code>.
+We suggest using the utility <code>shaka.util.AbortableOperation</code> for convenience.</p>
+<p>We also introduced an additional parameter for network scheme plugins to
+identify the request type.</p>
+<p>All applications which have application-level network scheme plugins SHOULD
+update to the new API.  Support for the old API will be removed in v2.5.</p>
+<pre class="prettyprint source lang-js"><code>// v2.2
+function fooPlugin(uri, request) {
+  return new Promise((resolve, reject) => {
+    // ...
+  });
+}
+shaka.net.NetworkingEngine.registerScheme('foo', fooPlugin);
+
+// v2.4
+function fooPlugin(uri, request, requestType) {
+  let rejectCallback = null;
+
+  const promise = new Promise((resolve, reject) => {
+    rejectCallback = reject;
+
+    // Use this if you have a need for it.  Ignore it otherwise.
+    if (requestType == shaka.net.NetworkingEngine.RequestType.MANIFEST) {
+      // ...
+    } else {
+      // ...
+    }
+
+    // ...
+  });
+
+  const abort = () => {
+    // Abort the operation.
+    // ...
+
+    // Reject the Promise.
+    rejectCallback(new shaka.util.Error(
+        shaka.util.Error.Severity.RECOVERABLE,
+        shaka.util.Error.Category.NETWORK,
+        shaka.util.Error.Code.OPERATION_ABORTED));
+  };
+
+  return new shaka.util.AbortableOperation(promise, abort);
+}
+shaka.net.NetworkingEngine.registerScheme('foo', fooPlugin);
+</code></pre>
+<h4>Manifest parser plugin API changes</h4>
+<p>The API for <code>shaka.media.PresentationTimeline</code> has changed.  <code>ManifestParser</code>
+plugins that use these methods MUST be updated:</p>
+<ul>
+<li><code>setAvailabilityStart()</code> was renamed to <code>setUserSeekStart()</code>.</li>
+<li><code>notifySegments()</code> now takes a reference array and a boolean called
+<code>isFirstPeriod</code>, instead of a period start time and a reference array.</li>
+</ul>
+</article>
+
+</section>
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:54 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

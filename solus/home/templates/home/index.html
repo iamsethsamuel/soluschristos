@@ -57,7 +57,7 @@ class=" bg-white">
         {% csrf_token %}
         <span id="postFormTitle" class="text-primary">Create a Post</span>
         <br>
-        <p class="float-right" onclick="formClose()"><b>X</b></p>
+        <p class="float-right" onclick="formClose()"><b class="badge badge-pill">X</b></p>
         <textarea class="form-control" name="content" wrap="off" form="postForm"
             onfocus="textAreaFunc()" autocapitalize="sentences" spellcheck="true" placeholder="Write a post" id="postContent">
         </textarea>

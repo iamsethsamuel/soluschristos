@@ -2,16 +2,17 @@ from django.shortcuts import render, redirect
 from .models import *
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from . forms import *
-from django.http import HttpResponseNotFound,HttpResponse
+from django.http import HttpResponseNotFound, HttpResponse
 from django.core.serializers import serialize
-from django.core.mail import send_mail
+
 
 def homepage(request):
     if request.user.is_authenticated:
-        subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
+        subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list(
+            "subscribe", flat=True)]
         postList = []
         posts = []
-        # suggested_users(request)
+        suggested = suggested_users(request)
         for user in subSubscribedID:
             postList.append(Posts.objects.filter(creator=user).order_by("-date"))
         for post in postList:
@@ -28,23 +29,27 @@ def homepage(request):
         if request.is_ajax():
             return render(request, "home/postAjax.html", {"posts": post})
         else:
-            return render(request, "home/posts_list.html", {"posts": post})
+            return render(request, "home/posts_list.html", {"posts": post,"suggested_users":suggested})
     else:
         return render(request, "home/welcome.html")
 
+
 def suggested_users(request):
-    subSubscribedID = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe",
-                                                                                                   flat=True)]
+    already_following = Subscription.objects.filter(subscriber=request.user.username).exclude(
+        subscribe=request.user)
+    suggested_users = Users.objects.filter(stateRegion=request.user.users.stateRegion).exclude(user=request.user)
+    suggested = []
+    following = []
     suggestions = []
-    following = [Users.objects.filter(stateRegion=request.user.users.stateRegion).exclude(
-             user=request.user)]
-    for user in subSubscribedID:
-            following.append(Subscription.objects.filter(subscribe=User.objects.get(id=user))
-                .exclude(subscriber=request.user))
-    for suggestion in following:
-         suggestions.insert(0, suggestion)
-    print(suggestions)
-    return HttpResponse("Ok")
+    for users in already_following:
+        following.append(users.subscribe.username)
+    for user in suggested_users:
+        suggested.append(user.user.username)
+    for suggestion in suggested:
+        if suggestion not in following:
+            suggestions.append(Users.objects.filter(user__username=suggestion))
+    return suggestions
+
 
 def notification(request):
     userSubcribed = [s for s in Subscription.objects.filter(subscriber=request.user).values_list("subscribe", flat=True)]
@@ -128,7 +133,6 @@ def signup(request):
             user = authenticate(request, username=auth_username, password=auth_password)
             login(request,user)
             Subscription.objects.create(subscriber=auth_username, subscribe=users)
-
             return redirect("home:home")
     else:
         import datetime
@@ -145,14 +149,14 @@ def profile(request, username):
     try:
         userid = User.objects.get(username=username).id
         profile = User.objects.get(username=username)
-        followers = Subscription.objects.filter(subscribe= userid).count()
-        user = User.objects.get(id = userid)
+        followers = Subscription.objects.filter(subscribe=userid).count()
+        user = User.objects.get(id=userid)
         following = Subscription.objects.filter(subscriber=user).count()
         raw_posts = Posts.objects.filter(creator_id=userid).order_by("-date")
         if Subscription.objects.filter(subscriber=request.user, subscribe=userid):
             allreadyFollowing = Subscription.objects.get(subscriber=request.user, subscribe=userid).subscriber
         else:
-            allreadyFollowing =""
+            allreadyFollowing = ""
         paginator = Paginator(raw_posts, 10)
         page = request.GET.get("profilepost")
         subscribe = Subscription.objects.filter(subscriber=request.user)
@@ -191,12 +195,11 @@ def update_profile(request, username):
     return render(request, 'home/userdetails.html', {"date": datetime.date.today().year - 14})
 
 
-def createFollow(request, userid):
-    user = User.objects.get(id=userid)
+def createFollow(request, username):
+    user = User.objects.get(username=username)
     Subscription.objects.create(subscribe=user, subscriber=request.user)
     Notifications.objects.create(user=request.user, item="{} has stated following you".format(str(user.username).title()),
                                  notified_user=user.username)
-    print(user)
     return redirect("home:profile", user.username)
 
 
@@ -279,9 +282,11 @@ def createPost(request):
             file.name = file.name.replace(fmt,"")
             file.name = file.name.replace("\n","")
             cmd = 'ffmpeg -t 10:0 -i "init{}.{}" -vf "scale=-2:720" -y -vf "scale=-2:240" "144{}.mp4" "{}.mp4"'\
-                .format(file.name, fmt,file.name,file.name)
+                .format(file.name, fmt, file.name, file.name)
+            picture = 'ffmpeg -t 2 -i init{}.{} -frames 1 -y {}.jpg'.format(file.name, fmt, file.name)
             shlex.quote(cmd)
-            with open("init{}.{}".format(file.name,fmt),"wb") as f:
+            shlex.quote(cmd)
+            with open("init{}.{}".format(file.name, fmt), "wb") as f:
                 for chunk in file.chunks():
                     f.write(chunk)
             ffm = subprocess.run(cmd, stderr=pipe, stdout=pipe, shell=True)
@@ -289,9 +294,9 @@ def createPost(request):
                 print("ffm error \n", ffm.stderr)
             shakaPackager = "packager in={}.mp4,stream=audio,output=audio{}.mp4 in={}.mp4,stream=video,output=shaka{}.mp4" \
                             " in=144{}.mp4,stream=video,output=shaka144{}.mp4  --mpd_output {}.mpd".format(file.name,
-                                    file.name,file.name, file.name,file.name,file.name,file.name)
+                                    file.name, file.name, file.name,file.name,file.name, file.name)
             shaka = subprocess.run(shakaPackager, shell=True, stdout=pipe, stderr=pipe)
-            # subprocess.run(pic_cmd,shell=True)
+            subprocess.run(picture, shell=True)
             if shaka.stderr:
                 print("shaka error \n",shaka.stderr)
             os.remove("init{}.{}".format(file.name,fmt))
@@ -438,24 +443,25 @@ def createPost(request):
             except:
                 pass
         elif pic:
-            try:
-                os.chdir("home/static/uploads/uploads")
-                if pic.name.endswith("mp4") or pic.name.endswith("avi"):
-                    ffmpeg(pic)
-                    post = Posts.objects.create(creator=creator, content=content, pic="uploads/{}.mpd".format(pic.name))
-                else:
-                    post = Posts.objects.create(creator=creator, content=content, pic=pic)
-                Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(request.user))
-                os.chdir("../../../..")
-            except:
-                pass
+
+            os.chdir("home/static/uploads/uploads")
+            if pic.name.endswith("mp4") or pic.name.endswith("avi"):
+                ffmpeg(pic)
+                post = Posts.objects.create(creator=creator, content=content, pic="uploads/{}.mpd".format(pic.name))
+            else:
+                post = Posts.objects.create(creator=creator, content=content, pic=pic)
+            Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(request.user))
+            os.chdir("../../../..")
+
+            print(pic)
         else:
-            post = Posts.objects.create(creator=creator,content=content)
+            post = Posts.objects.create(creator=creator, content=content)
             Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(str(request.user)
                                                                                                    .title()))
         return redirect("home:home")
     else:
         return render(request, 'home/posts_form.html')
+
 
 def postDetails(request, post_id):
     import datetime
@@ -472,7 +478,7 @@ def postDetails(request, post_id):
     except PageNotAnInteger:
         comments = comment_page.get_page(1)
     except Posts.DoesNotExist:
-        raise Http404("Opps sorry post can't be found")
+        raise HttpResponseNotFound("Opps sorry post can't be found")
     return render(request, "home/postdetail.html", {"posts": post, "likes": likes, "ccount": ccount,
                                                     "comments":comments,"date":datetime.date.today()})
 

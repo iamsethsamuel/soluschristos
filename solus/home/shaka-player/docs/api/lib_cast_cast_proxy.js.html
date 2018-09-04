@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: lib/cast/cast_proxy.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+    <h1 class="page-title">Source: lib/cast/cast_proxy.js</h1>
+
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @license
+ * Copyright 2016 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+goog.provide('shaka.cast.CastProxy');
+
+goog.require('goog.asserts');
+goog.require('shaka.cast.CastSender');
+goog.require('shaka.cast.CastUtils');
+goog.require('shaka.log');
+goog.require('shaka.util.Error');
+goog.require('shaka.util.EventManager');
+goog.require('shaka.util.FakeEvent');
+goog.require('shaka.util.FakeEventTarget');
+goog.require('shaka.util.IDestroyable');
+
+
+/**
+ * A proxy to switch between local and remote playback for Chromecast in a way
+ * that is transparent to the app's controls.
+ *
+ * @constructor
+ * @struct
+ * @param {!HTMLMediaElement} video The local video element associated with the
+ *   local Player instance.
+ * @param {!shaka.Player} player A local Player instance.
+ * @param {string} receiverAppId The ID of the cast receiver application.
+ * @implements {shaka.util.IDestroyable}
+ * @extends {shaka.util.FakeEventTarget}
+ * @export
+ */
+shaka.cast.CastProxy = function(video, player, receiverAppId) {
+  shaka.util.FakeEventTarget.call(this);
+
+  /** @private {HTMLMediaElement} */
+  this.localVideo_ = video;
+
+  /** @private {shaka.Player} */
+  this.localPlayer_ = player;
+
+  /** @private {Object} */
+  this.videoProxy_ = null;
+
+  /** @private {Object} */
+  this.playerProxy_ = null;
+
+  /** @private {shaka.util.FakeEventTarget} */
+  this.videoEventTarget_ = null;
+
+  /** @private {shaka.util.FakeEventTarget} */
+  this.playerEventTarget_ = null;
+
+  /** @private {shaka.util.EventManager} */
+  this.eventManager_ = null;
+
+  /** @private {shaka.cast.CastSender} */
+  this.sender_ = new shaka.cast.CastSender(
+      receiverAppId,
+      this.onCastStatusChanged_.bind(this),
+      this.onFirstCastStateUpdate_.bind(this),
+      this.onRemoteEvent_.bind(this),
+      this.onResumeLocal_.bind(this),
+      this.getInitState_.bind(this));
+
+  this.init_();
+};
+goog.inherits(shaka.cast.CastProxy, shaka.util.FakeEventTarget);
+
+
+/**
+ * Destroys the proxy and the underlying local Player.
+ *
+ * @param {boolean=} forceDisconnect If true, force the receiver app to shut
+ *   down by disconnecting.  Does nothing if not connected.
+ * @override
+ * @export
+ */
+shaka.cast.CastProxy.prototype.destroy = function(forceDisconnect) {
+  if (forceDisconnect &amp;&amp; this.sender_) {
+    this.sender_.forceDisconnect();
+  }
+
+  let async = [
+    this.eventManager_ ? this.eventManager_.destroy() : null,
+    this.localPlayer_ ? this.localPlayer_.destroy() : null,
+    this.sender_ ? this.sender_.destroy() : null,
+  ];
+
+  this.localVideo_ = null;
+  this.localPlayer_ = null;
+  this.videoProxy_ = null;
+  this.playerProxy_ = null;
+  this.eventManager_ = null;
+  this.sender_ = null;
+
+  return Promise.all(async);
+};
+
+
+/**
+ * @event shaka.cast.CastProxy.CastStatusChangedEvent
+ * @description Fired when cast status changes.  The status change will be
+ *   reflected in canCast() and isCasting().
+ * @property {string} type
+ *   'caststatuschanged'
+ * @exportDoc
+ */
+
+
+/**
+ * Get a proxy for the video element that delegates to local and remote video
+ * elements as appropriate.
+ *
+ * @suppress {invalidCasts} to cast proxy Objects to unrelated types
+ * @return {HTMLMediaElement}
+ * @export
+ */
+shaka.cast.CastProxy.prototype.getVideo = function() {
+  return /** @type {HTMLMediaElement} */(this.videoProxy_);
+};
+
+
+/**
+ * Get a proxy for the Player that delegates to local and remote Player objects
+ * as appropriate.
+ *
+ * @suppress {invalidCasts} to cast proxy Objects to unrelated types
+ * @return {shaka.Player}
+ * @export
+ */
+shaka.cast.CastProxy.prototype.getPlayer = function() {
+  return /** @type {shaka.Player} */(this.playerProxy_);
+};
+
+
+/**
+ * @return {boolean} True if the cast API is available and there are receivers.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.canCast = function() {
+  return this.sender_ ?
+      this.sender_.apiReady() &amp;&amp; this.sender_.hasReceivers() :
+      false;
+};
+
+
+/**
+ * @return {boolean} True if we are currently casting.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.isCasting = function() {
+  return this.sender_ ? this.sender_.isCasting() : false;
+};
+
+
+/**
+ * @return {string} The name of the Cast receiver device, if isCasting().
+ * @export
+ */
+shaka.cast.CastProxy.prototype.receiverName = function() {
+  return this.sender_ ? this.sender_.receiverName() : '';
+};
+
+
+/**
+ * @return {!Promise} Resolved when connected to a receiver.  Rejected if the
+ *   connection fails or is canceled by the user.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.cast = function() {
+  let initState = this.getInitState_();
+
+  // TODO: transfer manually-selected tracks?
+  // TODO: transfer side-loaded text tracks?
+
+  return this.sender_.cast(initState).then(function() {
+    if (!this.localPlayer_) {
+      // We've already been destroyed.
+      return;
+    }
+
+    // Unload the local manifest when casting succeeds.
+    return this.localPlayer_.unload();
+  }.bind(this));
+};
+
+
+/**
+ * Set application-specific data.
+ *
+ * @param {Object} appData Application-specific data to relay to the receiver.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.setAppData = function(appData) {
+  this.sender_.setAppData(appData);
+};
+
+
+/**
+ * Show a dialog where user can choose to disconnect from the cast connection.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.suggestDisconnect = function() {
+  this.sender_.showDisconnectDialog();
+};
+
+
+/**
+ * Force the receiver app to shut down by disconnecting.
+ * @export
+ */
+shaka.cast.CastProxy.prototype.forceDisconnect = function() {
+  this.sender_.forceDisconnect();
+};
+
+
+/**
+ * Initialize the Proxies and the Cast sender.
+ * @private
+ */
+shaka.cast.CastProxy.prototype.init_ = function() {
+  this.sender_.init();
+
+  this.eventManager_ = new shaka.util.EventManager();
+
+  shaka.cast.CastUtils.VideoEvents.forEach(function(name) {
+    this.eventManager_.listen(this.localVideo_, name,
+        this.videoProxyLocalEvent_.bind(this));
+  }.bind(this));
+
+  shaka.cast.CastUtils.PlayerEvents.forEach(function(name) {
+    this.eventManager_.listen(this.localPlayer_, name,
+        this.playerProxyLocalEvent_.bind(this));
+  }.bind(this));
+
+  // We would like to use Proxy here, but it is not supported on IE11 or Safari.
+  this.videoProxy_ = {};
+  for (let k in this.localVideo_) {
+    Object.defineProperty(this.videoProxy_, k, {
+      configurable: false,
+      enumerable: true,
+      get: this.videoProxyGet_.bind(this, k),
+      set: this.videoProxySet_.bind(this, k),
+    });
+  }
+
+  this.playerProxy_ = {};
+  for (let k in /** @type {Object} */(this.localPlayer_)) {
+    Object.defineProperty(this.playerProxy_, k, {
+      configurable: false,
+      enumerable: true,
+      get: this.playerProxyGet_.bind(this, k),
+    });
+  }
+
+  this.videoEventTarget_ = new shaka.util.FakeEventTarget();
+  this.videoEventTarget_.dispatchTarget =
+      /** @type {EventTarget} */(this.videoProxy_);
+
+  this.playerEventTarget_ = new shaka.util.FakeEventTarget();
+  this.playerEventTarget_.dispatchTarget =
+      /** @type {EventTarget} */(this.playerProxy_);
+};
+
+
+/**
+ * @return {shaka.cast.CastUtils.InitStateType} initState Video and player state
+ *   to be sent to the receiver.
+ * @private
+ */
+shaka.cast.CastProxy.prototype.getInitState_ = function() {
+  let initState = {
+    'video': {},
+    'player': {},
+    'playerAfterLoad': {},
+    'manifest': this.localPlayer_.getManifestUri(),
+    'startTime': null,
+  };
+
+  // Pause local playback before capturing state.
+  this.localVideo_.pause();
+
+  shaka.cast.CastUtils.VideoInitStateAttributes.forEach(function(name) {
+    initState['video'][name] = this.localVideo_[name];
+  }.bind(this));
+
+  // If the video is still playing, set the startTime.
+  // Has no effect if nothing is loaded.
+  if (!this.localVideo_.ended) {
+    initState['startTime'] = this.localVideo_.currentTime;
+  }
+
+  shaka.cast.CastUtils.PlayerInitState.forEach(function(pair) {
+    let getter = pair[0];
+    let setter = pair[1];
+    let value = /** @type {Object} */(this.localPlayer_)[getter]();
+
+    initState['player'][setter] = value;
+  }.bind(this));
+
+  shaka.cast.CastUtils.PlayerInitAfterLoadState.forEach(function(pair) {
+    let getter = pair[0];
+    let setter = pair[1];
+    let value = /** @type {Object} */(this.localPlayer_)[getter]();
+
+    initState['playerAfterLoad'][setter] = value;
+  }.bind(this));
+
+  return initState;
+};
+
+
+/**
+ * Dispatch an event to notify the app that the status has changed.
+ * @private
+ */
+shaka.cast.CastProxy.prototype.onCastStatusChanged_ = function() {
+  let event = new shaka.util.FakeEvent('caststatuschanged');
+  this.dispatchEvent(event);
+};
+
+
+/**
+ * Dispatch a synthetic play or pause event to ensure that the app correctly
+ * knows that the player is playing, if joining an existing receiver.
+ * @private
+ */
+shaka.cast.CastProxy.prototype.onFirstCastStateUpdate_ = function() {
+  let type = this.videoProxy_.paused ? 'pause' : 'play';
+  let fakeEvent = new shaka.util.FakeEvent(type);
+  this.videoEventTarget_.dispatchEvent(fakeEvent);
+};
+
+
+/**
+ * Transfer remote state back and resume local playback.
+ * @private
+ */
+shaka.cast.CastProxy.prototype.onResumeLocal_ = function() {
+  // Transfer back the player state.
+  shaka.cast.CastUtils.PlayerInitState.forEach(function(pair) {
+    let getter = pair[0];
+    let setter = pair[1];
+    let value = this.sender_.get('player', getter)();
+    /** @type {Object} */(this.localPlayer_)[setter](value);
+  }.bind(this));
+
+  // Get the most recent manifest URI and ended state.
+  let manifestUri = this.sender_.get('player', 'getManifestUri')();
+  let ended = this.sender_.get('video', 'ended');
+
+  let manifestReady = Promise.resolve();
+  let autoplay = this.localVideo_.autoplay;
+
+  let startTime = null;
+
+  // If the video is still playing, set the startTime.
+  // Has no effect if nothing is loaded.
+  if (!ended) {
+    startTime = this.sender_.get('video', 'currentTime');
+  }
+
+  // Now load the manifest, if present.
+  if (manifestUri) {
+    // Don't autoplay the content until we finish setting up initial state.
+    this.localVideo_.autoplay = false;
+    manifestReady = this.localPlayer_.load(manifestUri, startTime);
+  }
+
+  // Get the video state into a temp variable since we will apply it async.
+  let videoState = {};
+  shaka.cast.CastUtils.VideoInitStateAttributes.forEach(function(name) {
+    videoState[name] = this.sender_.get('video', name);
+  }.bind(this));
+
+  // Finally, take on video state and player's "after load" state.
+  manifestReady.then(() => {
+    if (!this.localVideo_) {
+      // We've already been destroyed.
+      return;
+    }
+
+    shaka.cast.CastUtils.VideoInitStateAttributes.forEach(function(name) {
+      this.localVideo_[name] = videoState[name];
+    }.bind(this));
+
+    shaka.cast.CastUtils.PlayerInitAfterLoadState.forEach(function(pair) {
+      let getter = pair[0];
+      let setter = pair[1];
+      let value = this.sender_.get('player', getter)();
+      /** @type {Object} */(this.localPlayer_)[setter](value);
+    }.bind(this));
+
+    // Restore the original autoplay setting.
+    this.localVideo_.autoplay = autoplay;
+    if (manifestUri) {
+      // Resume playback with transferred state.
+      this.localVideo_.play();
+    }
+  }, (error) => {
+    // Pass any errors through to the app.
+    goog.asserts.assert(error instanceof shaka.util.Error,
+                        'Wrong error type!');
+    let event = new shaka.util.FakeEvent('error', {'detail': error});
+    this.localPlayer_.dispatchEvent(event);
+  });
+};
+
+
+/**
+ * @param {string} name
+ * @return {?}
+ * @private
+ */
+shaka.cast.CastProxy.prototype.videoProxyGet_ = function(name) {
+  if (name == 'addEventListener') {
+    return this.videoEventTarget_.addEventListener.bind(
+        this.videoEventTarget_);
+  }
+  if (name == 'removeEventListener') {
+    return this.videoEventTarget_.removeEventListener.bind(
+        this.videoEventTarget_);
+  }
+
+  // If we are casting, but the first update has not come in yet, use local
+  // values, but not local methods.
+  if (this.sender_.isCasting() &amp;&amp; !this.sender_.hasRemoteProperties()) {
+    let value = this.localVideo_[name];
+    if (typeof value != 'function') {
+      return value;
+    }
+  }
+
+  // Use local values and methods if we are not casting.
+  if (!this.sender_.isCasting()) {
+    let value = this.localVideo_[name];
+    if (typeof value == 'function') {
+      value = value.bind(this.localVideo_);
+    }
+    return value;
+  }
+
+  return this.sender_.get('video', name);
+};
+
+
+/**
+ * @param {string} name
+ * @param {?} value
+ * @private
+ */
+shaka.cast.CastProxy.prototype.videoProxySet_ = function(name, value) {
+  if (!this.sender_.isCasting()) {
+    this.localVideo_[name] = value;
+    return;
+  }
+
+  this.sender_.set('video', name, value);
+};
+
+
+/**
+ * @param {!Event} event
+ * @private
+ */
+shaka.cast.CastProxy.prototype.videoProxyLocalEvent_ = function(event) {
+  if (this.sender_.isCasting()) {
+    // Ignore any unexpected local events while casting.  Events can still be
+    // fired by the local video and Player when we unload() after the Cast
+    // connection is complete.
+    return;
+  }
+
+  // Convert this real Event into a FakeEvent for dispatch from our
+  // FakeEventListener.
+  let fakeEvent = new shaka.util.FakeEvent(event.type, event);
+  this.videoEventTarget_.dispatchEvent(fakeEvent);
+};
+
+
+/**
+ * @param {string} name
+ * @return {?}
+ * @private
+ */
+shaka.cast.CastProxy.prototype.playerProxyGet_ = function(name) {
+  if (name == 'addEventListener') {
+    return this.playerEventTarget_.addEventListener.bind(
+        this.playerEventTarget_);
+  }
+  if (name == 'removeEventListener') {
+    return this.playerEventTarget_.removeEventListener.bind(
+        this.playerEventTarget_);
+  }
+
+  if (name == 'getMediaElement') {
+    return function() { return this.videoProxy_; }.bind(this);
+  }
+
+  if (name == 'getNetworkingEngine') {
+    // Always returns a local instance, in case you need to make a request.
+    // Issues a warning, in case you think you are making a remote request
+    // or affecting remote filters.
+    if (this.sender_.isCasting()) {
+      shaka.log.warning('NOTE: getNetworkingEngine() is always local!');
+    }
+    return this.localPlayer_.getNetworkingEngine.bind(this.localPlayer_);
+  }
+
+  if (this.sender_.isCasting()) {
+    // These methods are unavailable or otherwise stubbed during casting.
+    if (name == 'getManifest') {
+      return function() {
+        shaka.log.alwaysWarn('getManifest() does not work while casting!');
+        return null;
+      };
+    }
+
+    if (name == 'attach') {
+      return function() {
+        shaka.log.alwaysWarn('attach() does not work while casting!');
+        return Promise.resolve();
+      };
+    }
+
+    if (name == 'detach') {
+      return function() {
+        shaka.log.alwaysWarn('detach() does not work while casting!');
+        return Promise.resolve();
+      };
+    }
+  }  // if (this.sender_.isCasting())
+
+  // If we are casting, but the first update has not come in yet, use local
+  // getters, but not local methods.
+  if (this.sender_.isCasting() &amp;&amp; !this.sender_.hasRemoteProperties()) {
+    if (shaka.cast.CastUtils.PlayerGetterMethods[name]) {
+      let value = /** @type {Object} */(this.localPlayer_)[name];
+      goog.asserts.assert(typeof value == 'function', 'only methods on Player');
+      return value.bind(this.localPlayer_);
+    }
+  }
+
+  // Use local getters and methods if we are not casting.
+  if (!this.sender_.isCasting()) {
+    let value = /** @type {Object} */(this.localPlayer_)[name];
+    goog.asserts.assert(typeof value == 'function', 'only methods on Player');
+    return value.bind(this.localPlayer_);
+  }
+
+  return this.sender_.get('player', name);
+};
+
+
+/**
+ * @param {!Event} event
+ * @private
+ */
+shaka.cast.CastProxy.prototype.playerProxyLocalEvent_ = function(event) {
+  if (this.sender_.isCasting()) {
+    // Ignore any unexpected local events while casting.
+    return;
+  }
+
+  this.playerEventTarget_.dispatchEvent(event);
+};
+
+
+/**
+ * @param {string} targetName
+ * @param {!shaka.util.FakeEvent} event
+ * @private
+ */
+shaka.cast.CastProxy.prototype.onRemoteEvent_ = function(targetName, event) {
+  goog.asserts.assert(this.sender_.isCasting(),
+                      'Should only receive remote events while casting');
+  if (!this.sender_.isCasting()) {
+    // Ignore any unexpected remote events.
+    return;
+  }
+
+  if (targetName == 'video') {
+    this.videoEventTarget_.dispatchEvent(event);
+  } else if (targetName == 'player') {
+    this.playerEventTarget_.dispatchEvent(event);
+  }
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:50 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

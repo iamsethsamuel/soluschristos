@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: lib/util/ebml_parser.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+    <h1 class="page-title">Source: lib/util/ebml_parser.js</h1>
+
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @license
+ * Copyright 2016 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+goog.provide('shaka.util.EbmlElement');
+goog.provide('shaka.util.EbmlParser');
+
+goog.require('shaka.util.DataViewReader');
+goog.require('shaka.util.Error');
+goog.require('shaka.util.Uint8ArrayUtils');
+
+
+/**
+ * Creates an Extensible Binary Markup Language (EBML) parser.
+ * @param {!DataView} dataView The EBML data.
+ * @constructor
+ * @struct
+ */
+shaka.util.EbmlParser = function(dataView) {
+  /** @private {!DataView} */
+  this.dataView_ = dataView;
+
+  /** @private {!shaka.util.DataViewReader} */
+  this.reader_ = new shaka.util.DataViewReader(
+      dataView,
+      shaka.util.DataViewReader.Endianness.BIG_ENDIAN);
+
+  // If not already constructed, build a list of EBML dynamic size constants.
+  // This is not done at load-time to avoid exceptions on unsupported browsers.
+  if (!shaka.util.EbmlParser.DYNAMIC_SIZES) {
+    shaka.util.EbmlParser.DYNAMIC_SIZES = [
+      new Uint8Array([0xff]),
+      new Uint8Array([0x7f, 0xff]),
+      new Uint8Array([0x3f, 0xff, 0xff]),
+      new Uint8Array([0x1f, 0xff, 0xff, 0xff]),
+      new Uint8Array([0x0f, 0xff, 0xff, 0xff, 0xff]),
+      new Uint8Array([0x07, 0xff, 0xff, 0xff, 0xff, 0xff]),
+      new Uint8Array([0x03, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
+      new Uint8Array([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
+    ];
+  }
+};
+
+
+/** @const {!Array.&lt;!Uint8Array>} */
+shaka.util.EbmlParser.DYNAMIC_SIZES;
+
+
+/**
+ * @return {boolean} True if the parser has more data, false otherwise.
+ */
+shaka.util.EbmlParser.prototype.hasMoreData = function() {
+  return this.reader_.hasMoreData();
+};
+
+
+/**
+ * Parses an EBML element from the parser's current position, and advances
+ * the parser.
+ * @return {!shaka.util.EbmlElement} The EBML element.
+ * @throws {shaka.util.Error}
+ * @see http://matroska.org/technical/specs/rfc/index.html
+ */
+shaka.util.EbmlParser.prototype.parseElement = function() {
+  let id = this.parseId_();
+
+  // Parse the element's size.
+  let vint = this.parseVint_();
+  let size;
+  if (shaka.util.EbmlParser.isDynamicSizeValue_(vint)) {
+    // If this has an unknown size, assume that it takes up the rest of the
+    // data.
+    size = this.dataView_.byteLength - this.reader_.getPosition();
+  } else {
+    size = shaka.util.EbmlParser.getVintValue_(vint);
+  }
+
+  // Note that if the element's size is larger than the buffer then we are
+  // parsing a "partial element". This may occur if for example we are
+  // parsing the beginning of some WebM container data, but our buffer does
+  // not contain the entire WebM container data.
+  let elementSize =
+      this.reader_.getPosition() + size &lt;= this.dataView_.byteLength ?
+      size :
+      this.dataView_.byteLength - this.reader_.getPosition();
+
+  let dataView = new DataView(
+      this.dataView_.buffer,
+      this.dataView_.byteOffset + this.reader_.getPosition(), elementSize);
+
+  this.reader_.skip(elementSize);
+
+  return new shaka.util.EbmlElement(id, dataView);
+};
+
+
+/**
+ * Parses an EBML ID from the parser's current position, and advances the
+ * parser.
+ * @throws {shaka.util.Error}
+ * @return {number} The EBML ID.
+ * @private
+ */
+shaka.util.EbmlParser.prototype.parseId_ = function() {
+  let vint = this.parseVint_();
+
+  if (vint.length > 7) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.EBML_OVERFLOW);
+  }
+
+  let id = 0;
+  for (let i = 0; i &lt; vint.length; i++) {
+    // Note that we cannot use &lt;&lt; since |value| may exceed 32 bits.
+    id = (256 * id) + vint[i];
+  }
+
+  return id;
+};
+
+
+/**
+ * Parses a variable sized integer from the parser's current position, and
+ * advances the parser.
+ * For example:
+ *   1 byte  wide: 1xxx xxxx
+ *   2 bytes wide: 01xx xxxx xxxx xxxx
+ *   3 bytes wide: 001x xxxx xxxx xxxx xxxx xxxx
+ * @throws {shaka.util.Error}
+ * @return {!Uint8Array} The variable sized integer.
+ * @private
+ */
+shaka.util.EbmlParser.prototype.parseVint_ = function() {
+  let firstByte = this.reader_.readUint8();
+  let numBytes;
+
+  // Determine the byte width of the variable sized integer.
+  for (numBytes = 1; numBytes &lt;= 8; numBytes++) {
+    let mask = 0x1 &lt;&lt; (8 - numBytes);
+    if (firstByte &amp; mask) {
+      break;
+    }
+  }
+
+  if (numBytes > 8) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.EBML_OVERFLOW);
+  }
+
+  let vint = new Uint8Array(numBytes);
+  vint[0] = firstByte;
+
+  // Include the remaining bytes.
+  for (let i = 1; i &lt; numBytes; i++) {
+    vint[i] = this.reader_.readUint8();
+  }
+
+  return vint;
+};
+
+
+/**
+ * Gets the value of a variable sized integer.
+ * For example, the x's below are part of the vint's value.
+ *    7-bit value: 1xxx xxxx
+ *   14-bit value: 01xx xxxx xxxx xxxx
+ *   21-bit value: 001x xxxx xxxx xxxx xxxx xxxx
+ * @param {!Uint8Array} vint The variable sized integer.
+ * @throws {shaka.util.Error}
+ * @return {number} The value of the variable sized integer.
+ * @private
+ */
+shaka.util.EbmlParser.getVintValue_ = function(vint) {
+  // If |vint| is 8 bytes wide then we must ensure that it does not have more
+  // than 53 meaningful bits. For example, assume |vint| is 8 bytes wide,
+  // so it has the following structure,
+  // 0000 0001 | xxxx xxxx ...
+  // Thus, the first 3 bits following the first byte of |vint| must be 0.
+  if ((vint.length == 8) &amp;&amp; (vint[1] &amp; 0xe0)) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.JS_INTEGER_OVERFLOW);
+  }
+
+  // Mask out the first few bits of |vint|'s first byte to get the most
+  // significant bits of |vint|'s value. If |vint| is 8 bytes wide then |value|
+  // will be set to 0.
+  let mask = 0x1 &lt;&lt; (8 - vint.length);
+  let value = vint[0] &amp; (mask - 1);
+
+  // Add the remaining bytes.
+  for (let i = 1; i &lt; vint.length; i++) {
+    // Note that we cannot use &lt;&lt; since |value| may exceed 32 bits.
+    value = (256 * value) + vint[i];
+  }
+
+  return value;
+};
+
+
+/**
+ * Checks if the given variable sized integer represents a dynamic size value.
+ * @param {!Uint8Array} vint The variable sized integer.
+ * @return {boolean} true if |vint| represents a dynamic size value,
+ *   false otherwise.
+ * @private
+ */
+shaka.util.EbmlParser.isDynamicSizeValue_ = function(vint) {
+  const EbmlParser = shaka.util.EbmlParser;
+  let uint8ArrayEqual = shaka.util.Uint8ArrayUtils.equal;
+
+  for (let i = 0; i &lt; EbmlParser.DYNAMIC_SIZES.length; i++) {
+    if (uint8ArrayEqual(vint, EbmlParser.DYNAMIC_SIZES[i])) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+
+/**
+ * Creates an EbmlElement.
+ * @param {number} id The ID.
+ * @param {!DataView} dataView The DataView.
+ * @constructor
+ */
+shaka.util.EbmlElement = function(id, dataView) {
+  /** @type {number} */
+  this.id = id;
+
+  /** @private {!DataView} */
+  this.dataView_ = dataView;
+};
+
+
+/**
+ * Gets the element's offset from the beginning of the buffer.
+ * @return {number}
+ */
+shaka.util.EbmlElement.prototype.getOffset = function() {
+  return this.dataView_.byteOffset;
+};
+
+
+/**
+ * Interpret the element's data as a list of sub-elements.
+ * @throws {shaka.util.Error}
+ * @return {!shaka.util.EbmlParser} A parser over the sub-elements.
+ */
+shaka.util.EbmlElement.prototype.createParser = function() {
+  return new shaka.util.EbmlParser(this.dataView_);
+};
+
+
+/**
+ * Interpret the element's data as an unsigned integer.
+ * @throws {shaka.util.Error}
+ * @return {number}
+ */
+shaka.util.EbmlElement.prototype.getUint = function() {
+  if (this.dataView_.byteLength > 8) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.EBML_OVERFLOW);
+  }
+
+  // Ensure we have at most 53 meaningful bits.
+  if ((this.dataView_.byteLength == 8) &amp;&amp; (this.dataView_.getUint8(0) &amp; 0xe0)) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.JS_INTEGER_OVERFLOW);
+  }
+
+  let value = 0;
+
+  for (let i = 0; i &lt; this.dataView_.byteLength; i++) {
+    let chunk = this.dataView_.getUint8(i);
+    value = (256 * value) + chunk;
+  }
+
+  return value;
+};
+
+
+/**
+ * Interpret the element's data as a floating point number (32 bits or 64 bits).
+ * 80-bit floating point numbers are not supported.
+ * @throws {shaka.util.Error}
+ * @return {number}
+ */
+shaka.util.EbmlElement.prototype.getFloat = function() {
+  if (this.dataView_.byteLength == 4) {
+    return this.dataView_.getFloat32(0);
+  } else if (this.dataView_.byteLength == 8) {
+    return this.dataView_.getFloat64(0);
+  } else {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.MEDIA,
+        shaka.util.Error.Code.EBML_BAD_FLOATING_POINT_SIZE);
+  }
+};
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:50 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

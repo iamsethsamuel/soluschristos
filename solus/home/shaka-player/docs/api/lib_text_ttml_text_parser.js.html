@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: lib/text/ttml_text_parser.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+    <h1 class="page-title">Source: lib/text/ttml_text_parser.js</h1>
+
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @license
+ * Copyright 2016 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+goog.provide('shaka.text.TtmlTextParser');
+
+goog.require('goog.asserts');
+goog.require('shaka.log');
+goog.require('shaka.text.Cue');
+goog.require('shaka.text.CueRegion');
+goog.require('shaka.text.TextEngine');
+goog.require('shaka.util.ArrayUtils');
+goog.require('shaka.util.Error');
+goog.require('shaka.util.StringUtils');
+
+
+/**
+ * @constructor
+ * @implements {shaka.extern.TextParser}
+ */
+shaka.text.TtmlTextParser = function() {};
+
+
+/** @override */
+shaka.text.TtmlTextParser.prototype.parseInit = function(data) {
+  goog.asserts.assert(false, 'TTML does not have init segments');
+};
+
+
+/** @override */
+shaka.text.TtmlTextParser.prototype.parseMedia = function(data, time) {
+  const TtmlTextParser = shaka.text.TtmlTextParser;
+  let str = shaka.util.StringUtils.fromUTF8(data);
+  let ret = [];
+  let parser = new DOMParser();
+  let xml = null;
+
+  try {
+    xml = parser.parseFromString(str, 'text/xml');
+  } catch (exception) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.TEXT,
+        shaka.util.Error.Code.INVALID_XML);
+  }
+
+  if (xml) {
+    // Try to get the framerate, subFrameRate and frameRateMultiplier
+    // if applicable
+    let frameRate = null;
+    let subFrameRate = null;
+    let frameRateMultiplier = null;
+    let tickRate = null;
+    let spaceStyle = null;
+    let tts = xml.getElementsByTagName('tt');
+    let tt = tts[0];
+    // TTML should always have tt element.
+    if (!tt) {
+      throw new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.TEXT,
+          shaka.util.Error.Code.INVALID_XML);
+    } else {
+      frameRate = tt.getAttribute('ttp:frameRate');
+      subFrameRate = tt.getAttribute('ttp:subFrameRate');
+      frameRateMultiplier = tt.getAttribute('ttp:frameRateMultiplier');
+      tickRate = tt.getAttribute('ttp:tickRate');
+      spaceStyle = tt.getAttribute('xml:space') || 'default';
+    }
+
+    if (spaceStyle != 'default' &amp;&amp; spaceStyle != 'preserve') {
+      throw new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.TEXT,
+          shaka.util.Error.Code.INVALID_XML);
+    }
+    let whitespaceTrim = spaceStyle == 'default';
+
+    let rateInfo = new TtmlTextParser.RateInfo_(
+        frameRate, subFrameRate, frameRateMultiplier, tickRate);
+
+    let styles = TtmlTextParser.getLeafNodes_(
+        tt.getElementsByTagName('styling')[0]);
+    let regionElements = TtmlTextParser.getLeafNodes_(
+        tt.getElementsByTagName('layout')[0]);
+    let cueRegions = [];
+    for (let i = 0; i &lt; regionElements.length; i++) {
+      let cueRegion = TtmlTextParser.parseCueRegion_(
+          regionElements[i], styles);
+      if (cueRegion) {
+        cueRegions.push(cueRegion);
+      }
+    }
+
+    let textNodes = TtmlTextParser.getLeafNodes_(
+        tt.getElementsByTagName('body')[0]);
+
+    for (let i = 0; i &lt; textNodes.length; i++) {
+      let cue = TtmlTextParser.parseCue_(textNodes[i],
+                                         time.periodStart,
+                                         rateInfo,
+                                         styles,
+                                         regionElements,
+                                         cueRegions,
+                                         whitespaceTrim);
+      if (cue) {
+        ret.push(cue);
+      }
+    }
+  }
+
+  return ret;
+};
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 50% 10%
+ */
+shaka.text.TtmlTextParser.percentValues_ = /^(\d{1,2}|100)% (\d{1,2}|100)%$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 100px
+ */
+shaka.text.TtmlTextParser.unitValues_ = /^(\d+px|\d+em)$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 100px
+ */
+shaka.text.TtmlTextParser.pixelValues_ = /^(\d+)px (\d+)px$/;
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 00:00:40:07 (7 frames) or 00:00:40:07.1 (7 frames, 1 subframe)
+ */
+shaka.text.TtmlTextParser.timeColonFormatFrames_ =
+    /^(\d{2,}):(\d{2}):(\d{2}):(\d{2})\.?(\d+)?$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 00:00:40 or 00:40
+ */
+shaka.text.TtmlTextParser.timeColonFormat_ = /^(?:(\d{2,}):)?(\d{2}):(\d{2})$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 01:02:43.0345555 or 02:43.03
+ */
+shaka.text.TtmlTextParser.timeColonFormatMilliseconds_ =
+    /^(?:(\d{2,}):)?(\d{2}):(\d{2}\.\d{2,})$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 75f or 75.5f
+ */
+shaka.text.TtmlTextParser.timeFramesFormat_ = /^(\d*(?:\.\d*)?)f$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 50t or 50.5t
+ */
+shaka.text.TtmlTextParser.timeTickFormat_ = /^(\d*(?:\.\d*)?)t$/;
+
+
+/**
+ * @const
+ * @private {!RegExp}
+ * @example 3.45h, 3m or 4.20s
+ */
+shaka.text.TtmlTextParser.timeHMSFormat_ =
+    new RegExp(['^(?:(\\d*(?:\\.\\d*)?)h)?',
+                '(?:(\\d*(?:\\.\\d*)?)m)?',
+                '(?:(\\d*(?:\\.\\d*)?)s)?',
+                '(?:(\\d*(?:\\.\\d*)?)ms)?$'].join(''));
+
+
+/**
+ * @const
+ * @private {!Object.&lt;string, shaka.text.Cue.lineAlign>}
+ */
+shaka.text.TtmlTextParser.textAlignToLineAlign_ = {
+  'left': shaka.text.Cue.lineAlign.START,
+  'center': shaka.text.Cue.lineAlign.CENTER,
+  'right': shaka.text.Cue.lineAlign.END,
+  'start': shaka.text.Cue.lineAlign.START,
+  'end': shaka.text.Cue.lineAlign.END,
+};
+
+
+/**
+ * @const
+ * @private {!Object.&lt;string, shaka.text.Cue.positionAlign>}
+ */
+shaka.text.TtmlTextParser.textAlignToPositionAlign_ = {
+  'left': shaka.text.Cue.positionAlign.LEFT,
+  'center': shaka.text.Cue.positionAlign.CENTER,
+  'right': shaka.text.Cue.positionAlign.RIGHT,
+};
+
+
+/**
+ * Gets the leaf nodes of the xml node tree. Ignores the text, br elements
+ * and the spans positioned inside paragraphs
+ *
+ * @param {Element} element
+ * @return {!Array.&lt;!Element>}
+ * @private
+ */
+shaka.text.TtmlTextParser.getLeafNodes_ = function(element) {
+  let result = [];
+  if (!element) {
+    return result;
+  }
+
+  let childNodes = element.childNodes;
+  for (let i = 0; i &lt; childNodes.length; i++) {
+    // Currently we don't support styles applicable to span
+    // elements, so they are ignored.
+    let isSpanChildOfP = childNodes[i].nodeName == 'span' &amp;&amp;
+        element.nodeName == 'p';
+    if (childNodes[i].nodeType == Node.ELEMENT_NODE &amp;&amp;
+        childNodes[i].nodeName != 'br' &amp;&amp; !isSpanChildOfP) {
+      // Get the leaves the child might contain.
+      goog.asserts.assert(childNodes[i] instanceof Element,
+                          'Node should be Element!');
+      let leafChildren = shaka.text.TtmlTextParser.getLeafNodes_(
+          /** @type {Element} */(childNodes[i]));
+      goog.asserts.assert(leafChildren.length > 0,
+                          'Only a null Element should return no leaves!');
+      result = result.concat(leafChildren);
+    }
+  }
+
+  // if no result at this point, the element itself must be a leaf.
+  if (!result.length) {
+    result.push(element);
+  }
+  return result;
+};
+
+
+/**
+ * Inserts \n where &lt;br> tags are found.
+ *
+ * @param {!Node} element
+ * @param {boolean} whitespaceTrim
+ * @private
+ */
+shaka.text.TtmlTextParser.addNewLines_ = function(element, whitespaceTrim) {
+  let childNodes = element.childNodes;
+
+  for (let i = 0; i &lt; childNodes.length; i++) {
+    if (childNodes[i].nodeName == 'br' &amp;&amp; i > 0) {
+      childNodes[i - 1].textContent += '\n';
+    } else if (childNodes[i].childNodes.length > 0) {
+      shaka.text.TtmlTextParser.addNewLines_(childNodes[i], whitespaceTrim);
+    } else if (whitespaceTrim) {
+      // Trim leading and trailing whitespace.
+      let trimmed = childNodes[i].textContent.trim();
+      // Collapse multiple spaces into one.
+      trimmed = trimmed.replace(/\s+/g, ' ');
+
+      childNodes[i].textContent = trimmed;
+    }
+  }
+};
+
+
+/**
+ * Parses an Element into a TextTrackCue or VTTCue.
+ *
+ * @param {!Element} cueElement
+ * @param {number} offset
+ * @param {!shaka.text.TtmlTextParser.RateInfo_} rateInfo
+ * @param {!Array.&lt;!Element>} styles
+ * @param {!Array.&lt;!Element>} regionElements
+ * @param {!Array.&lt;!shaka.text.CueRegion>} cueRegions
+ * @param {boolean} whitespaceTrim
+ * @return {shaka.text.Cue}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseCue_ = function(
+    cueElement, offset, rateInfo, styles, regionElements,
+    cueRegions, whitespaceTrim) {
+  // Disregard empty elements:
+  // TTML allows for empty elements like &lt;div>&lt;/div>.
+  // If cueElement has neither time attributes, nor
+  // non-whitespace text, don't try to make a cue out of it.
+  if (!cueElement.hasAttribute('begin') &amp;&amp;
+      !cueElement.hasAttribute('end') &amp;&amp;
+      /^\s*$/.test(cueElement.textContent)) {
+    return null;
+  }
+
+  shaka.text.TtmlTextParser.addNewLines_(cueElement, whitespaceTrim);
+
+  // Get time.
+  let start = shaka.text.TtmlTextParser.parseTime_(
+      cueElement.getAttribute('begin'), rateInfo);
+  let end = shaka.text.TtmlTextParser.parseTime_(
+      cueElement.getAttribute('end'), rateInfo);
+  let duration = shaka.text.TtmlTextParser.parseTime_(
+      cueElement.getAttribute('dur'), rateInfo);
+  let payload = cueElement.textContent;
+
+  if (end == null &amp;&amp; duration != null) {
+    end = start + duration;
+  }
+
+  if (start == null || end == null) {
+    throw new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.TEXT,
+        shaka.util.Error.Code.INVALID_TEXT_CUE);
+  }
+
+  start += offset;
+  end += offset;
+
+  let cue = new shaka.text.Cue(start, end, payload);
+
+  // Get other properties if available.
+  let regionElement = shaka.text.TtmlTextParser.getElementFromCollection_(
+      cueElement, 'region', regionElements);
+  if (regionElement &amp;&amp; regionElement.getAttribute('xml:id')) {
+    let regionId = regionElement.getAttribute('xml:id');
+    let regionsWithId = cueRegions.filter(function(region) {
+      return region.id == regionId;
+    });
+    cue.region = regionsWithId[0];
+  }
+  shaka.text.TtmlTextParser.addStyle_(cue, cueElement, regionElement, styles);
+
+  return cue;
+};
+
+
+/**
+ * Parses an Element into a TextTrackCue or VTTCue.
+ *
+ * @param {!Element} regionElement
+ * @param {!Array.&lt;!Element>} styles
+ * @return {shaka.text.CueRegion}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseCueRegion_ = function(regionElement, styles) {
+  const TtmlTextParser = shaka.text.TtmlTextParser;
+  let region = new shaka.text.CueRegion();
+  let id = regionElement.getAttribute('xml:id');
+  if (!id) {
+    shaka.log.warning('TtmlTextParser parser encountered a region with ' +
+                      'no id. Region will be ignored.');
+    return null;
+  }
+  region.id = id;
+
+  let results = null;
+  let percentage = null;
+  let extent = TtmlTextParser.getStyleAttributeFromRegion_(
+      regionElement, styles, 'tts:extent');
+  if (extent) {
+    percentage = TtmlTextParser.percentValues_.exec(extent);
+    results = percentage || TtmlTextParser.pixelValues_.exec(extent);
+    if (results != null) {
+      region.width = Number(results[1]);
+      region.height = Number(results[2]);
+      region.widthUnits = percentage ?
+                         shaka.text.CueRegion.units.PERCENTAGE :
+                         shaka.text.CueRegion.units.PX;
+
+      region.heightUnits = percentage ?
+                         shaka.text.CueRegion.units.PERCENTAGE :
+                         shaka.text.CueRegion.units.PX;
+    }
+  }
+
+  let origin = TtmlTextParser.getStyleAttributeFromRegion_(
+      regionElement, styles, 'tts:origin');
+  if (origin) {
+    percentage = TtmlTextParser.percentValues_.exec(origin);
+    results = percentage || TtmlTextParser.pixelValues_.exec(origin);
+    if (results != null) {
+      region.viewportAnchorX = Number(results[1]);
+      region.viewportAnchorY = Number(results[2]);
+      region.viewportAnchorUnits = percentage ?
+                shaka.text.CueRegion.units.PERCENTAGE :
+                shaka.text.CueRegion.units.PX;
+    }
+  }
+
+  return region;
+};
+
+/**
+ * Adds applicable style properties to a cue.
+ *
+ * @param {!shaka.text.Cue} cue
+ * @param {!Element} cueElement
+ * @param {Element} region
+ * @param {!Array.&lt;!Element>} styles
+ * @private
+ */
+shaka.text.TtmlTextParser.addStyle_ = function(
+    cue, cueElement, region, styles) {
+  const TtmlTextParser = shaka.text.TtmlTextParser;
+  const Cue = shaka.text.Cue;
+
+  let direction = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:direction');
+  if (direction == 'rtl') {
+    cue.writingDirection = Cue.writingDirection.HORIZONTAL_RIGHT_TO_LEFT;
+  }
+
+  // Direction attribute specifies one-dimentional writing direction
+  // (left to right or right to left). Writing mode specifies that
+  // plus whether text is vertical or horizontal.
+  // They should not contradict each other. If they do, we give
+  // preference to writing mode.
+  let writingMode = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:writingMode');
+  if (writingMode == 'tb' || writingMode == 'tblr') {
+    cue.writingDirection = Cue.writingDirection.VERTICAL_LEFT_TO_RIGHT;
+  } else if (writingMode == 'tbrl') {
+    cue.writingDirection = Cue.writingDirection.VERTICAL_RIGHT_TO_LEFT;
+  } else if (writingMode == 'rltb' || writingMode == 'rl') {
+    cue.writingDirection = Cue.writingDirection.HORIZONTAL_RIGHT_TO_LEFT;
+  } else if (writingMode) {
+    cue.writingDirection = Cue.writingDirection.HORIZONTAL_LEFT_TO_RIGHT;
+  }
+
+  let align = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:textAlign');
+  if (align) {
+    cue.positionAlign = TtmlTextParser.textAlignToPositionAlign_[align];
+    cue.lineAlign = TtmlTextParser.textAlignToLineAlign_[align];
+
+    goog.asserts.assert(align.toUpperCase() in Cue.textAlign,
+                        align.toUpperCase() +
+                        ' Should be in Cue.textAlign values!');
+
+    cue.textAlign = Cue.textAlign[align.toUpperCase()];
+  }
+
+  let displayAlign = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:displayAlign');
+  if (displayAlign) {
+    goog.asserts.assert(displayAlign.toUpperCase() in Cue.displayAlign,
+                        displayAlign.toUpperCase() +
+                        ' Should be in Cue.displayAlign values!');
+    cue.displayAlign = Cue.displayAlign[displayAlign.toUpperCase()];
+  }
+
+  let color = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:color');
+  if (color) {
+    cue.color = color;
+  }
+
+  let backgroundColor = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:backgroundColor');
+  if (backgroundColor) {
+    cue.backgroundColor = backgroundColor;
+  }
+
+  let fontFamily = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:fontFamily');
+  if (fontFamily) {
+    cue.fontFamily = fontFamily;
+  }
+
+  let fontWeight = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:fontWeight');
+  if (fontWeight &amp;&amp; fontWeight == 'bold') {
+    cue.fontWeight = Cue.fontWeight.BOLD;
+  }
+
+  let wrapOption = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:wrapOption');
+  if (wrapOption &amp;&amp; wrapOption == 'noWrap') {
+    cue.wrapLine = false;
+  }
+
+  let lineHeight = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:lineHeight');
+  if (lineHeight &amp;&amp; lineHeight.match(TtmlTextParser.unitValues_)) {
+    cue.lineHeight = lineHeight;
+  }
+
+  let fontSize = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:fontSize');
+  if (fontSize &amp;&amp; fontSize.match(TtmlTextParser.unitValues_)) {
+    cue.fontSize = fontSize;
+  }
+
+  let fontStyle = TtmlTextParser.getStyleAttribute_(
+      cueElement, region, styles, 'tts:fontStyle');
+  if (fontStyle) {
+    goog.asserts.assert(fontStyle.toUpperCase() in Cue.fontStyle,
+                        fontStyle.toUpperCase() +
+                        ' Should be in Cue.fontStyle values!');
+    cue.fontStyle = Cue.fontStyle[fontStyle.toUpperCase()];
+  }
+
+  // Text decoration is an array of values which can come both from the
+  // element's style or be inherited from elements' parent nodes. All of those
+  // values should be applied as long as they don't contradict each other. If
+  // they do, elements' own style gets preference.
+  let textDecorationRegion = TtmlTextParser.getStyleAttributeFromRegion_(
+      region, styles, 'tts:textDecoration');
+  if (textDecorationRegion) {
+    TtmlTextParser.addTextDecoration_(cue, textDecorationRegion);
+  }
+
+  let textDecorationElement = TtmlTextParser.getStyleAttributeFromElement_(
+      cueElement, styles, 'tts:textDecoration');
+  if (textDecorationElement) {
+    TtmlTextParser.addTextDecoration_(cue, textDecorationElement);
+  }
+};
+
+
+/**
+ * Parses text decoration values and adds/removes them to/from the cue.
+ *
+ * @param {!shaka.text.Cue} cue
+ * @param {string} decoration
+ * @private
+ */
+shaka.text.TtmlTextParser.addTextDecoration_ = function(cue, decoration) {
+  const Cue = shaka.text.Cue;
+  let values = decoration.split(' ');
+  for (let i = 0; i &lt; values.length; i++) {
+    switch (values[i]) {
+      case 'underline':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.UNDERLINE) &lt; 0) {
+          cue.textDecoration.push(Cue.textDecoration.UNDERLINE);
+        }
+        break;
+      case 'noUnderline':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.UNDERLINE) >= 0) {
+          shaka.util.ArrayUtils.remove(cue.textDecoration,
+                                       Cue.textDecoration.UNDERLINE);
+        }
+        break;
+      case 'lineThrough':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.LINE_THROUGH) &lt; 0) {
+          cue.textDecoration.push(Cue.textDecoration.LINE_THROUGH);
+        }
+        break;
+      case 'noLineThrough':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.LINE_THROUGH) >= 0) {
+          shaka.util.ArrayUtils.remove(cue.textDecoration,
+                                       Cue.textDecoration.LINE_THROUGH);
+        }
+        break;
+      case 'overline':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.OVERLINE) &lt; 0) {
+          cue.textDecoration.push(Cue.textDecoration.OVERLINE);
+        }
+        break;
+      case 'noOverline':
+        if (cue.textDecoration.indexOf(Cue.textDecoration.OVERLINE) >= 0) {
+          shaka.util.ArrayUtils.remove(cue.textDecoration,
+                                       Cue.textDecoration.OVERLINE);
+        }
+        break;
+    }
+  }
+};
+
+
+/**
+ * Finds a specified attribute on either the original cue element or its
+ * associated region and returns the value if the attribute was found.
+ *
+ * @param {!Element} cueElement
+ * @param {Element} region
+ * @param {!Array.&lt;!Element>} styles
+ * @param {string} attribute
+ * @return {?string}
+ * @private
+ */
+shaka.text.TtmlTextParser.getStyleAttribute_ = function(
+    cueElement, region, styles, attribute) {
+  // An attribute can be specified on region level or in a styling block
+  // associated with the region or original element.
+  const TtmlTextParser = shaka.text.TtmlTextParser;
+  let attr = TtmlTextParser.getStyleAttributeFromElement_(
+      cueElement, styles, attribute);
+  if (attr) {
+    return attr;
+  }
+
+  return TtmlTextParser.getStyleAttributeFromRegion_(
+      region, styles, attribute);
+};
+
+
+/**
+ * Finds a specified attribute on the element's associated region
+ * and returns the value if the attribute was found.
+ *
+ * @param {Element} region
+ * @param {!Array.&lt;!Element>} styles
+ * @param {string} attribute
+ * @return {?string}
+ * @private
+ */
+shaka.text.TtmlTextParser.getStyleAttributeFromRegion_ = function(
+    region, styles, attribute) {
+  let regionChildren = shaka.text.TtmlTextParser.getLeafNodes_(region);
+  for (let i = 0; i &lt; regionChildren.length; i++) {
+    let attr = regionChildren[i].getAttribute(attribute);
+    if (attr) {
+      return attr;
+    }
+  }
+
+  let style = shaka.text.TtmlTextParser.getElementFromCollection_(
+      region, 'style', styles);
+  if (style) {
+    return style.getAttribute(attribute);
+  }
+  return null;
+};
+
+
+/**
+ * Finds a specified attribute on the cue element and returns the value
+ * if the attribute was found.
+ *
+ * @param {!Element} cueElement
+ * @param {!Array.&lt;!Element>} styles
+ * @param {string} attribute
+ * @return {?string}
+ * @private
+ */
+shaka.text.TtmlTextParser.getStyleAttributeFromElement_ = function(
+    cueElement, styles, attribute) {
+  let getElementFromCollection_ =
+      shaka.text.TtmlTextParser.getElementFromCollection_;
+  let style = getElementFromCollection_(cueElement, 'style', styles);
+  if (style) {
+    return style.getAttribute(attribute);
+  }
+  return null;
+};
+
+
+/**
+ * Selects an item from |collection| whose id matches |attributeName|
+ * from |element|.
+ *
+ * @param {Element} element
+ * @param {string} attributeName
+ * @param {!Array.&lt;Element>} collection
+ * @return {Element}
+ * @private
+ */
+shaka.text.TtmlTextParser.getElementFromCollection_ = function(
+    element, attributeName, collection) {
+  if (!element || collection.length &lt; 1) {
+    return null;
+  }
+  let item = null;
+  let itemName = shaka.text.TtmlTextParser.getInheritedAttribute_(
+      element, attributeName);
+  if (itemName) {
+    for (let i = 0; i &lt; collection.length; i++) {
+      if (collection[i].getAttribute('xml:id') == itemName) {
+        item = collection[i];
+        break;
+      }
+    }
+  }
+
+  return item;
+};
+
+
+/**
+ * Traverses upwards from a given node until a given attribute is found.
+ *
+ * @param {!Element} element
+ * @param {string} attributeName
+ * @return {?string}
+ * @private
+ */
+shaka.text.TtmlTextParser.getInheritedAttribute_ = function(
+    element, attributeName) {
+  let ret = null;
+  while (element) {
+    ret = element.getAttribute(attributeName);
+    if (ret) {
+      break;
+    }
+
+    // Element.parentNode can lead to XMLDocument, which is not an Element and
+    // has no getAttribute().
+    let parentNode = element.parentNode;
+    if (parentNode instanceof Element) {
+      element = parentNode;
+    } else {
+      break;
+    }
+  }
+  return ret;
+};
+
+
+/**
+ * Parses a TTML time from the given word.
+ *
+ * @param {string} text
+ * @param {!shaka.text.TtmlTextParser.RateInfo_} rateInfo
+ * @return {?number}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseTime_ = function(text, rateInfo) {
+  let ret = null;
+  const TtmlTextParser = shaka.text.TtmlTextParser;
+
+  if (TtmlTextParser.timeColonFormatFrames_.test(text)) {
+    ret = TtmlTextParser.parseColonTimeWithFrames_(rateInfo, text);
+  } else if (TtmlTextParser.timeColonFormat_.test(text)) {
+    ret = TtmlTextParser.parseTimeFromRegex_(
+        TtmlTextParser.timeColonFormat_, text);
+  } else if (TtmlTextParser.timeColonFormatMilliseconds_.test(text)) {
+    ret = TtmlTextParser.parseTimeFromRegex_(
+        TtmlTextParser.timeColonFormatMilliseconds_, text);
+  } else if (TtmlTextParser.timeFramesFormat_.test(text)) {
+    ret = TtmlTextParser.parseFramesTime_(rateInfo, text);
+  } else if (TtmlTextParser.timeTickFormat_.test(text)) {
+    ret = TtmlTextParser.parseTickTime_(rateInfo, text);
+  } else if (TtmlTextParser.timeHMSFormat_.test(text)) {
+    ret = TtmlTextParser.parseTimeFromRegex_(
+        TtmlTextParser.timeHMSFormat_, text);
+  }
+
+  return ret;
+};
+
+
+/**
+ * Parses a TTML time in frame format.
+ *
+ * @param {!shaka.text.TtmlTextParser.RateInfo_} rateInfo
+ * @param {string} text
+ * @return {?number}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseFramesTime_ = function(rateInfo, text) {
+  // 75f or 75.5f
+  let results = shaka.text.TtmlTextParser.timeFramesFormat_.exec(text);
+  let frames = Number(results[1]);
+
+  return frames / rateInfo.frameRate;
+};
+
+
+/**
+ * Parses a TTML time in tick format.
+ *
+ * @param {!shaka.text.TtmlTextParser.RateInfo_} rateInfo
+ * @param {string} text
+ * @return {?number}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseTickTime_ = function(rateInfo, text) {
+  // 50t or 50.5t
+  let results = shaka.text.TtmlTextParser.timeTickFormat_.exec(text);
+  let ticks = Number(results[1]);
+
+  return ticks / rateInfo.tickRate;
+};
+
+
+/**
+ * Parses a TTML colon formatted time containing frames.
+ *
+ * @param {!shaka.text.TtmlTextParser.RateInfo_} rateInfo
+ * @param {string} text
+ * @return {?number}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseColonTimeWithFrames_ = function(
+    rateInfo, text) {
+  // 01:02:43:07 ('07' is frames) or 01:02:43:07.1 (subframes)
+  let results = shaka.text.TtmlTextParser.timeColonFormatFrames_.exec(text);
+
+  let hours = Number(results[1]);
+  let minutes = Number(results[2]);
+  let seconds = Number(results[3]);
+  let frames = Number(results[4]);
+  let subframes = Number(results[5]) || 0;
+
+  frames += subframes / rateInfo.subFrameRate;
+  seconds += frames / rateInfo.frameRate;
+
+  return seconds + (minutes * 60) + (hours * 3600);
+};
+
+
+/**
+ * Parses a TTML time with a given regex. Expects regex to be some
+ * sort of a time-matcher to match hours, minutes, seconds and milliseconds
+ *
+ * @param {!RegExp} regex
+ * @param {string} text
+ * @return {?number}
+ * @private
+ */
+shaka.text.TtmlTextParser.parseTimeFromRegex_ = function(regex, text) {
+  let results = regex.exec(text);
+  if (results == null || results[0] == '') {
+    return null;
+  }
+  // This capture is optional, but will still be in the array as undefined,
+  // in which case it is 0.
+  let hours = Number(results[1]) || 0;
+  let minutes = Number(results[2]) || 0;
+  let seconds = Number(results[3]) || 0;
+  let miliseconds = Number(results[4]) || 0;
+
+  return (miliseconds / 1000) + seconds + (minutes * 60) + (hours * 3600);
+};
+
+
+/**
+ * Contains information about frame/subframe rate
+ * and frame rate multiplier for time in frame format.
+ *
+ * @example 01:02:03:04(4 frames) or 01:02:03:04.1(4 frames, 1 subframe)
+ * @param {?string} frameRate
+ * @param {?string} subFrameRate
+ * @param {?string} frameRateMultiplier
+ * @param {?string} tickRate
+ * @constructor
+ * @struct
+ * @private
+ */
+shaka.text.TtmlTextParser.RateInfo_ = function(
+    frameRate, subFrameRate, frameRateMultiplier, tickRate) {
+  /**
+   * @type {number}
+   */
+  this.frameRate = Number(frameRate) || 30;
+
+  /**
+   * @type {number}
+   */
+  this.subFrameRate = Number(subFrameRate) || 1;
+
+  /**
+   * @type {number}
+   */
+  this.tickRate = Number(tickRate);
+  if (this.tickRate == 0) {
+    if (frameRate) {
+      this.tickRate = this.frameRate * this.subFrameRate;
+    } else {
+      this.tickRate = 1;
+    }
+  }
+
+  if (frameRateMultiplier) {
+    let multiplierResults = /^(\d+) (\d+)$/g.exec(frameRateMultiplier);
+    if (multiplierResults) {
+      let numerator = multiplierResults[1];
+      let denominator = multiplierResults[2];
+      let multiplierNum = numerator / denominator;
+      this.frameRate *= multiplierNum;
+    }
+  }
+};
+
+
+shaka.text.TextEngine.registerParser(
+    'application/ttml+xml',
+    shaka.text.TtmlTextParser);
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:50 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

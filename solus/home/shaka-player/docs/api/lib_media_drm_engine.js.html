@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: lib/media/drm_engine.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+    <h1 class="page-title">Source: lib/media/drm_engine.js</h1>
+
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @license
+ * Copyright 2016 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+goog.provide('shaka.media.DrmEngine');
+
+goog.require('goog.asserts');
+goog.require('shaka.log');
+goog.require('shaka.net.NetworkingEngine');
+goog.require('shaka.util.ArrayUtils');
+goog.require('shaka.util.Error');
+goog.require('shaka.util.EventManager');
+goog.require('shaka.util.FakeEvent');
+goog.require('shaka.util.Functional');
+goog.require('shaka.util.IDestroyable');
+goog.require('shaka.util.ManifestParserUtils');
+goog.require('shaka.util.MapUtils');
+goog.require('shaka.util.MimeUtils');
+goog.require('shaka.util.PublicPromise');
+goog.require('shaka.util.StringUtils');
+goog.require('shaka.util.Timer');
+goog.require('shaka.util.Uint8ArrayUtils');
+
+
+/**
+ * @param {shaka.media.DrmEngine.PlayerInterface} playerInterface
+ *
+ * @constructor
+ * @struct
+ * @implements {shaka.util.IDestroyable}
+ */
+shaka.media.DrmEngine = function(playerInterface) {
+  /** @private {?shaka.media.DrmEngine.PlayerInterface} */
+  this.playerInterface_ = playerInterface;
+
+  /** @private {Array.&lt;string>} */
+  this.supportedTypes_ = null;
+
+  /** @private {MediaKeys} */
+  this.mediaKeys_ = null;
+
+  /** @private {HTMLMediaElement} */
+  this.video_ = null;
+
+  /** @private {boolean} */
+  this.initialized_ = false;
+
+  /** @private {?shaka.extern.DrmInfo} */
+  this.currentDrmInfo_ = null;
+
+  /** @private {shaka.util.EventManager} */
+  this.eventManager_ = new shaka.util.EventManager();
+
+  /** @private {!Array.&lt;shaka.media.DrmEngine.ActiveSession>} */
+  this.activeSessions_ = [];
+
+  /** @private {!Array.&lt;string>} */
+  this.offlineSessionIds_ = [];
+
+  /** @private {!shaka.util.PublicPromise} */
+  this.allSessionsLoaded_ = new shaka.util.PublicPromise();
+
+  /** @private {?shaka.extern.DrmConfiguration} */
+  this.config_ = null;
+
+  /** @private {?function(!shaka.util.Error)} */
+  this.onError_ = (err) => {
+    this.allSessionsLoaded_.reject(err);
+    playerInterface.onError(err);
+  };
+
+  /** @private {!Object.&lt;string, string>} */
+  this.keyStatusByKeyId_ = {};
+
+  /** @private {shaka.util.Timer} */
+  this.keyStatusTimer_ =
+      new shaka.util.Timer(() => this.processKeyStatusChanges_());
+
+  /** @private {boolean} */
+  this.destroyed_ = false;
+
+  /** @private {boolean} */
+  this.isOffline_ = false;
+
+  /** @private {!Array.&lt;!MediaKeyMessageEvent>} */
+  this.mediaKeyMessageEvents_ = [];
+
+  /** @private {boolean} */
+  this.initialRequestsSent_ = false;
+
+  /** @private {?shaka.util.Timer} */
+  this.expirationTimer_
+      = new shaka.util.Timer(() => this.pollExpiration_());
+  this.expirationTimer_.scheduleRepeated(1);
+
+  // Add a catch to the Promise to avoid console logs about uncaught errors.
+  const noop = () => {};
+  this.allSessionsLoaded_.catch(noop);
+};
+
+
+/**
+ * @typedef {{
+ *   loaded: boolean,
+ *   initData: Uint8Array,
+ *   session: !MediaKeySession,
+ *   oldExpiration: number,
+ *   updatePromise: shaka.util.PublicPromise
+ * }}
+ *
+ * @description A record to track sessions and suppress duplicate init data.
+ * @property {boolean} loaded
+ *   True once the key status has been updated (to a non-pending state).  This
+ *   does not mean the session is 'usable'.
+ * @property {Uint8Array} initData
+ *   The init data used to create the session.
+ * @property {!MediaKeySession} session
+ *   The session object.
+ * @property {number} oldExpiration
+ *   The expiration of the session on the last check.  This is used to fire
+ *   an event when it changes.
+ * @property {shaka.util.PublicPromise} updatePromise
+ *   An optional Promise that will be resolved/rejected on the next update()
+ *   call.  This is used to track the 'license-release' message when calling
+ *   remove().
+ */
+shaka.media.DrmEngine.ActiveSession;
+
+
+/**
+ * @typedef {{
+ *   netEngine: !shaka.net.NetworkingEngine,
+ *   onError: function(!shaka.util.Error),
+ *   onKeyStatus: function(!Object.&lt;string,string>),
+ *   onExpirationUpdated: function(string,number),
+ *   onEvent: function(!Event)
+ * }}
+ *
+ * @property {shaka.net.NetworkingEngine} netEngine
+ *   The NetworkingEngine instance to use.  The caller retains ownership.
+ * @property {function(!shaka.util.Error)} onError
+ *   Called when an error occurs.  If the error is recoverable (see
+ *   {@link shaka.util.Error}) then the caller may invoke either
+ *   StreamingEngine.switch*() or StreamingEngine.seeked() to attempt recovery.
+ * @property {function(!Object.&lt;string,string>)} onKeyStatus
+ *   Called when key status changes.  The argument is a map of hex key IDs to
+ *   statuses.
+ * @property {function(string,number)} onExpirationUpdated
+ *   Called when the session expiration value changes.
+ * @property {function(!Event)} onEvent
+ *   Called when an event occurs that should be sent to the app.
+ */
+shaka.media.DrmEngine.PlayerInterface;
+
+
+/** @override */
+shaka.media.DrmEngine.prototype.destroy = function() {
+  const Functional = shaka.util.Functional;
+  this.destroyed_ = true;
+
+  let async = [];
+
+  // Wait for sessions to close when destroying.
+  this.activeSessions_.forEach(function(activeSession) {
+    // Ignore any errors when closing the sessions.  One such error would be
+    // an invalid state error triggered by closing a session which has not
+    // generated any key requests.
+    let close = activeSession.session.close().catch(Functional.noop);
+    // Due to a bug in Chrome, sometimes the Promise returned by close()
+    // never resolves.  See issue #1093 and https://crbug.com/690583.
+    let closeTimeout = shaka.media.DrmEngine.timeout_(1000);
+    async.push(Promise.race([close, closeTimeout]));
+  });
+  this.allSessionsLoaded_.reject();
+
+  if (this.eventManager_) {
+    async.push(this.eventManager_.destroy());
+  }
+
+  if (this.video_) {
+    goog.asserts.assert(!this.video_.src, 'video src must be removed first!');
+    async.push(this.video_.setMediaKeys(null).catch(Functional.noop));
+  }
+
+  if (this.expirationTimer_) {
+    this.expirationTimer_.cancel();
+    this.expirationTimer_ = null;
+  }
+
+  if (this.keyStatusTimer_) {
+    this.keyStatusTimer_.cancel();
+    this.keyStatusTimer_ = null;
+  }
+
+  this.currentDrmInfo_ = null;
+  this.supportedTypes_ = null;
+  this.mediaKeys_ = null;
+  this.video_ = null;
+  this.eventManager_ = null;
+  this.activeSessions_ = [];
+  this.offlineSessionIds_ = [];
+  this.config_ = null;
+  this.onError_ = null;
+  this.playerInterface_ = null;
+
+  return Promise.all(async);
+};
+
+
+/**
+ * Called by the Player to provide an updated configuration any time it changes.
+ * Must be called at least once before init().
+ *
+ * @param {shaka.extern.DrmConfiguration} config
+ */
+shaka.media.DrmEngine.prototype.configure = function(config) {
+  this.config_ = config;
+};
+
+
+/**
+ * Negotiate for a key system and set up MediaKeys.
+ * @param {!shaka.extern.Manifest} manifest The manifest is read for MIME type
+ *   and DRM information to query EME.  If the 'clearKeys' configuration is
+ *   used, the manifest will be modified to force the use of Clear Key.
+ * @param {boolean} offline True if we are storing or loading offline content.
+ * @return {!Promise} Resolved if/when a key system has been chosen.
+ */
+shaka.media.DrmEngine.prototype.init = function(manifest, offline) {
+  goog.asserts.assert(this.config_,
+      'DrmEngine configure() must be called before init()!');
+
+  /** @type {!Object.&lt;string, MediaKeySystemConfiguration>} */
+  let configsByKeySystem = {};
+
+  /** @type {!Array.&lt;string>} */
+  let keySystemsInOrder = [];
+
+  // If initial manifest contains unencrypted content, drm configuration
+  // overrides DrmInfo so drmEngine can be activated. Thus, the player can play
+  // encrypted content if live stream switches from unencrypted content to
+  // encrypted content during live streams.
+  let isEncryptedContent = manifest.periods.some((period) => {
+    return period.variants.some((variant) => variant.drmInfos.length);
+  });
+
+  // |isOffline_| determines what kind of session to create.  The argument to
+  // |prepareMediaKeyConfigs_| determines the kind of CDM to query for.  So
+  // we still need persistent state when we are loading offline sessions.
+  this.isOffline_ = offline;
+  this.offlineSessionIds_ = manifest.offlineSessionIds;
+  this.prepareMediaKeyConfigs_(
+      manifest, offline || manifest.offlineSessionIds.length > 0,
+      configsByKeySystem, keySystemsInOrder, isEncryptedContent);
+
+  if (!keySystemsInOrder.length) {
+    // Unencrypted.
+    this.initialized_ = true;
+    return Promise.resolve();
+  }
+
+  return this.queryMediaKeys_(
+      configsByKeySystem, keySystemsInOrder, isEncryptedContent);
+};
+
+
+/**
+ * Attach MediaKeys to the video element and start processing events.
+ * @param {HTMLMediaElement} video
+ * @return {!Promise}
+ */
+shaka.media.DrmEngine.prototype.attach = function(video) {
+  if (!this.mediaKeys_) {
+    // Unencrypted, or so we think.  We listen for encrypted events in order to
+    // warn when the stream is encrypted, even though the manifest does not know
+    // it.
+    // Don't complain about this twice, so just listenOnce().
+    this.eventManager_.listenOnce(video, 'encrypted', (event) => {
+      this.onError_(new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.DRM,
+          shaka.util.Error.Code.ENCRYPTED_CONTENT_WITHOUT_DRM_INFO));
+    });
+    return Promise.resolve();
+  }
+
+  this.video_ = video;
+
+  this.eventManager_.listenOnce(this.video_, 'play', () => this.onPlay_());
+
+  let setMediaKeys = this.video_.setMediaKeys(this.mediaKeys_);
+  setMediaKeys = setMediaKeys.catch(function(exception) {
+    return Promise.reject(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_ATTACH_TO_VIDEO,
+        exception.message));
+  });
+
+  let setServerCertificate = null;
+  if (this.currentDrmInfo_.serverCertificate &amp;&amp;
+      this.currentDrmInfo_.serverCertificate.length) {
+    setServerCertificate = this.mediaKeys_.setServerCertificate(
+        this.currentDrmInfo_.serverCertificate).then(function(supported) {
+      if (!supported) {
+        shaka.log.warning('Server certificates are not supported by the key' +
+                          ' system.  The server certificate has been ignored.');
+      }
+    }).catch(function(exception) {
+      return Promise.reject(new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.DRM,
+          shaka.util.Error.Code.INVALID_SERVER_CERTIFICATE,
+          exception.message));
+    });
+  }
+
+  return Promise.all([setMediaKeys, setServerCertificate]).then(() => {
+    if (this.destroyed_) return Promise.reject();
+
+    this.createOrLoad();
+    if (!this.currentDrmInfo_.initData.length &amp;&amp;
+        !this.offlineSessionIds_.length) {
+      // Explicit init data for any one stream or an offline session is
+      // sufficient to suppress 'encrypted' events for all streams.
+      this.eventManager_.listen(
+          this.video_,
+          'encrypted',
+          (e) => this.onEncrypted_(/** @type {!MediaEncryptedEvent} */ (e)));
+    }
+  }).catch((error) => {
+    if (this.destroyed_) return Promise.resolve();  // Ignore destruction errors
+    return Promise.reject(error);
+  });
+};
+
+
+/**
+ * Remove all given offline sessions and delete their data. This can only be
+ * called after a successful call to |init|. This will wait until the
+ * 'license-release' message is handled for each license. The returned Promise
+ * will be rejected if there is an error releasing any of the licenses.
+ *
+ * @param {!Array.&lt;string>} sessions
+ * @return {!Promise}
+ */
+shaka.media.DrmEngine.prototype.removeSessions = function(sessions) {
+  return Promise.all(sessions.map((id) => this.removeSession(id)));
+};
+
+
+/**
+ * Remove an offline session and delete it's data. This can only be called
+ * after a successful call to |init|. This will wait until the 'license-release'
+ * message is handled. The returned Promise will be rejected if there is an
+ * error releasing the license.
+ *
+ * @param {string} sessionId
+ * @return {!Promise}
+ */
+shaka.media.DrmEngine.prototype.removeSession = async function(sessionId) {
+  goog.asserts.assert(this.mediaKeys_, 'Must call init() before removeSession');
+
+  let session = await this.loadOfflineSession_(sessionId);
+
+  // This will be null on error, such as session not found.
+  if (!session) {
+    return;
+  }
+
+  /** @type {!Array.&lt;!Promise>} */
+  let tasks = [];
+
+  // TODO: Consider adding a timeout to get the 'message' event.
+  // Note that the 'message' event will get raised after the remove()
+  // promise resolves.
+
+  let active = this.activeSessions_.filter((s) => s.session == session);
+  goog.asserts.assert(
+      active.length &lt;= 1,
+      'There should be no more than one active session matching ' + sessionId);
+
+  active.forEach((activeSession) => {
+    let update = new shaka.util.PublicPromise();
+    tasks.push(update);
+    activeSession.updatePromise = update;
+  });
+
+  tasks.push(session.remove());
+
+  return Promise.all(tasks);
+};
+
+/**
+ * Creates the sessions for the init data and waits for them to become ready.
+ *
+ * @return {!Promise}
+ */
+shaka.media.DrmEngine.prototype.createOrLoad = function() {
+  // Create temp sessions.
+  let initDatas = this.currentDrmInfo_ ? this.currentDrmInfo_.initData : [];
+  initDatas.forEach((initDataOverride) => {
+    return this.createTemporarySession_(initDataOverride.initDataType,
+                                        initDataOverride.initData);
+  });
+
+  // Load each session.
+  this.offlineSessionIds_.forEach((sessionId) => {
+    return this.loadOfflineSession_(sessionId);
+  });
+
+  // If we have no sessions, we need to resolve the promise right now or else
+  // it will never get resolved.
+  if (!initDatas.length &amp;&amp; !this.offlineSessionIds_.length) {
+    this.allSessionsLoaded_.resolve();
+  }
+
+  return this.allSessionsLoaded_;
+};
+
+
+/** @return {boolean} */
+shaka.media.DrmEngine.prototype.initialized = function() {
+  return this.initialized_;
+};
+
+
+/** @return {string} */
+shaka.media.DrmEngine.prototype.keySystem = function() {
+  return this.currentDrmInfo_ ? this.currentDrmInfo_.keySystem : '';
+};
+
+
+/**
+ * Returns an array of the media types supported by the current key system.
+ * These will be full mime types (e.g. 'video/webm; codecs="vp8"').
+ *
+ * @return {Array.&lt;string>}
+ */
+shaka.media.DrmEngine.prototype.getSupportedTypes = function() {
+  return this.supportedTypes_;
+};
+
+
+/**
+ * Returns the ID of the sessions currently active.
+ *
+ * @return {!Array.&lt;string>}
+ */
+shaka.media.DrmEngine.prototype.getSessionIds = function() {
+  return this.activeSessions_.map(function(session) {
+    return session.session.sessionId;
+  });
+};
+
+
+/**
+ * Returns the next expiration time, or Infinity.
+ * @return {number}
+ */
+shaka.media.DrmEngine.prototype.getExpiration = function() {
+  let expirations = this.activeSessions_.map(function(session) {
+    let expiration = session.session.expiration;
+    return isNaN(expiration) ? Infinity : expiration;
+  });
+  // This will equal Infinity if there are no entries.
+  return Math.min.apply(Math, expirations);
+};
+
+
+/**
+ * Returns the DrmInfo that was used to initialize the current key system.
+ *
+ * @return {?shaka.extern.DrmInfo}
+ */
+shaka.media.DrmEngine.prototype.getDrmInfo = function() {
+  return this.currentDrmInfo_;
+};
+
+
+/**
+ * @param {!shaka.extern.Manifest} manifest
+ * @param {boolean} offline True if we are storing or loading offline content.
+ * @param {!Object.&lt;string, MediaKeySystemConfiguration>} configsByKeySystem
+ *   (Output parameter.)  A dictionary of configs, indexed by key system.
+ * @param {!Array.&lt;string>} keySystemsInOrder
+ *   (Output parameter.)  A list of key systems in the order in which we
+ *   encounter them.
+ * @param {boolean} isEncryptedContent
+ *   True if the content is encrypted, false otherwise.
+ * @see https://bit.ly/EmeConfig for MediaKeySystemConfiguration spec
+ * @private
+ */
+shaka.media.DrmEngine.prototype.prepareMediaKeyConfigs_ =
+    function(manifest, offline, configsByKeySystem, keySystemsInOrder,
+             isEncryptedContent) {
+  /**
+   * Clear Key config overrides the manifest DrmInfo if present. The manifest
+   * is modified so that filtering in Player still works.
+   *
+   * @type {?shaka.extern.DrmInfo}
+   */
+  let clearKeyDrmInfo = this.configureClearKey_();
+  if (clearKeyDrmInfo) {
+    shaka.media.DrmEngine.overrideDrmInfo_(manifest, [clearKeyDrmInfo]);
+  }
+
+  if (!isEncryptedContent) {
+    let config = this.config_;
+    let serverKeys = Object.keys(config.servers);
+    let overrideDrmInfos = serverKeys.map((keySystem) => {
+      return {
+        keySystem: keySystem,
+        licenseServerUri: config.servers[keySystem],
+        distinctiveIdentifierRequired: false,
+        persistentStateRequired: false,
+        audioRobustness: '',
+        videoRobustness: '',
+        serverCertificate: null,
+        initData: [],
+        keyIds: [],
+      };
+    });
+
+    if (overrideDrmInfos.length) {
+      shaka.media.DrmEngine.overrideDrmInfo_(manifest, overrideDrmInfos);
+    }
+  }
+
+  manifest.periods.forEach((period) => {
+    period.variants.forEach((variant) => {
+      this.prepareMediaKeyConfigsForVariant_(
+          variant, offline, configsByKeySystem, keySystemsInOrder);
+    });
+  });
+};
+
+
+/**
+ * @param {shaka.extern.Manifest} manifest
+ * @param {!Array.&lt;shaka.extern.DrmInfo>} info
+ * @private
+ */
+shaka.media.DrmEngine.overrideDrmInfo_ = function(manifest, info) {
+  manifest.periods.forEach((period) => {
+    period.variants.forEach((variant) => {
+      variant.drmInfos = info;
+    });
+  });
+};
+
+
+/**
+ * @param {!shaka.extern.Variant} variant
+ * @param {boolean} offline True if we are storing or loading offline content.
+ * @param {!Object.&lt;string, MediaKeySystemConfiguration>} configsByKeySystem
+ *   (Output parameter.)  A dictionary of configs, indexed by key system.
+ * @param {!Array.&lt;string>} keySystemsInOrder
+ *   (Output parameter.)  A list of key systems in the order in which we
+ *   encounter them.
+ * @see https://bit.ly/EmeConfig for MediaKeySystemConfiguration spec
+ * @private
+ */
+shaka.media.DrmEngine.prototype.prepareMediaKeyConfigsForVariant_ =
+    function(variant, offline, configsByKeySystem, keySystemsInOrder) {
+  // Get all the streams in the variant.
+  let streams = [];
+  if (variant.video) streams.push(variant.video);
+  if (variant.audio) streams.push(variant.audio);
+
+  // Make sure all the drm infos are valid and filled in correctly.
+  variant.drmInfos.forEach((info) => {
+    this.fillInDrmInfoDefaults_(info);
+
+    // Chromecast has a variant of PlayReady that uses a different key
+    // system ID.  Since manifest parsers convert the standard PlayReady
+    // UUID to the standard PlayReady key system ID, here we will switch
+    // to the Chromecast version if we are running on that platform.
+    // Note that this must come after fillInDrmInfoDefaults_, since the
+    // player config uses the standard PlayReady ID for license server
+    // configuration.
+    if (window.cast &amp;&amp; window.cast.__platform__) {
+      if (info.keySystem == 'com.microsoft.playready') {
+        info.keySystem = 'com.chromecast.playready';
+      }
+    }
+  });
+
+  // Fill in any missing config entries.
+  variant.drmInfos.forEach((info) => {
+    if (configsByKeySystem[info.keySystem]) {
+      return;
+    }
+
+    let config = {
+      // Ignore initDataTypes.
+      audioCapabilities: [],
+      videoCapabilities: [],
+      distinctiveIdentifier: 'optional',
+      persistentState: offline ? 'required' : 'optional',
+      sessionTypes: [offline ? 'persistent-license' : 'temporary'],
+      label: info.keySystem,
+      drmInfos: [],  // Tracked by us, ignored by EME.
+    };
+
+    configsByKeySystem[info.keySystem] = config;
+    keySystemsInOrder.push(info.keySystem);
+  });
+
+  // Add the last bit of information to each config;
+  variant.drmInfos.forEach((info) => {
+    let config = configsByKeySystem[info.keySystem];
+    goog.asserts.assert(
+        config,
+        'Any missing configs should have be filled in before.');
+
+    config.drmInfos.push(info);
+
+    if (info.distinctiveIdentifierRequired) {
+      config.distinctiveIdentifier = 'required';
+    }
+
+    if (info.persistentStateRequired) {
+      config.persistentState = 'required';
+    }
+
+    streams.forEach((stream) => {
+      const ContentType = shaka.util.ManifestParserUtils.ContentType;
+      let isVideo = stream.type == ContentType.VIDEO;
+
+      /** @type {?string} */
+      let robustness = isVideo ?
+                       info.videoRobustness :
+                       info.audioRobustness;
+
+      /** @type {string} */
+      let fullMimeType = shaka.util.MimeUtils.getFullType(
+          stream.mimeType, stream.codecs);
+
+      /** @type {MediaKeySystemMediaCapability} */
+      let capability = {
+        robustness: robustness || '',
+        contentType: fullMimeType,
+      };
+
+      if (isVideo) {
+        config.videoCapabilities.push(capability);
+      } else {
+        config.audioCapabilities.push(capability);
+      }
+    });
+  });
+};
+
+
+/**
+ * @param {!Object.&lt;string, MediaKeySystemConfiguration>} configsByKeySystem
+ *   A dictionary of configs, indexed by key system.
+ * @param {!Array.&lt;string>} keySystemsInOrder
+ *   A list of key systems in the order in which we should query them.
+ *   On a browser which supports multiple key systems, the order may indicate
+ *   a real preference for the application.
+ * @param {boolean} isEncryptedContent
+ *   True if the content is encrypted, false otherwise.
+ * @return {!Promise} Resolved if/when a key system has been chosen.
+ * @private
+ */
+shaka.media.DrmEngine.prototype.queryMediaKeys_ =
+    function(configsByKeySystem, keySystemsInOrder, isEncryptedContent) {
+  if (keySystemsInOrder.length == 1 &amp;&amp; keySystemsInOrder[0] == '') {
+    return Promise.reject(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.NO_RECOGNIZED_KEY_SYSTEMS));
+  }
+
+  // Wait to reject this initial Promise until we have built the entire chain.
+  let instigator = new shaka.util.PublicPromise();
+  let p = instigator;
+
+  // Try key systems with configured license servers first.  We only have to try
+  // key systems without configured license servers for diagnostic reasons, so
+  // that we can differentiate between "none of these key systems are available"
+  // and "some are available, but you did not configure them properly."  The
+  // former takes precedence.
+  [true, false].forEach(function(shouldHaveLicenseServer) {
+    keySystemsInOrder.forEach(function(keySystem) {
+      let config = configsByKeySystem[keySystem];
+
+      let hasLicenseServer = config.drmInfos.some(function(info) {
+        return !!info.licenseServerUri;
+      });
+      if (hasLicenseServer != shouldHaveLicenseServer) return;
+
+      // If there are no tracks of a type, these should be not present.
+      // Otherwise the query will fail.
+      if (config.audioCapabilities.length == 0) {
+        delete config.audioCapabilities;
+      }
+      if (config.videoCapabilities.length == 0) {
+        delete config.videoCapabilities;
+      }
+
+      p = p.catch(function() {
+        if (this.destroyed_) return Promise.reject();
+        return navigator.requestMediaKeySystemAccess(keySystem, [config]);
+      }.bind(this));
+    }.bind(this));
+  }.bind(this));
+
+  p = p.catch(() => {
+    return Promise.reject(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.REQUESTED_KEY_SYSTEM_CONFIG_UNAVAILABLE));
+  });
+
+  p = p.then(function(mediaKeySystemAccess) {
+    if (this.destroyed_) return Promise.reject();
+
+    // TODO: Remove once Edge has released a fix for https://bit.ly/2IcEgv0
+    let isEdge = navigator.userAgent.indexOf('Edge/') >= 0;
+
+    // Store the capabilities of the key system.
+    let realConfig = mediaKeySystemAccess.getConfiguration();
+    let audioCaps = realConfig.audioCapabilities || [];
+    let videoCaps = realConfig.videoCapabilities || [];
+    let caps = audioCaps.concat(videoCaps);
+    this.supportedTypes_ = caps.map(function(c) { return c.contentType; });
+    if (isEdge) {
+      // Edge 14 does not report correct capabilities.  It will only report the
+      // first MIME type even if the others are supported.  To work around this,
+      // set the supported types to null, which Player will use as a signal that
+      // the information is not available.
+      // See: https://bit.ly/2IcEgv0
+      this.supportedTypes_ = null;
+    }
+    goog.asserts.assert(!this.supportedTypes_ || this.supportedTypes_.length,
+                        'We should get at least one supported MIME type');
+
+    let originalConfig = configsByKeySystem[mediaKeySystemAccess.keySystem];
+    this.createCurrentDrmInfo_(
+        mediaKeySystemAccess.keySystem, originalConfig,
+        originalConfig.drmInfos);
+
+    if (!this.currentDrmInfo_.licenseServerUri) {
+      return Promise.reject(new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.DRM,
+          shaka.util.Error.Code.NO_LICENSE_SERVER_GIVEN));
+    }
+
+    return mediaKeySystemAccess.createMediaKeys();
+  }.bind(this)).then(function(mediaKeys) {
+    if (this.destroyed_) return Promise.reject();
+
+    this.mediaKeys_ = mediaKeys;
+    this.initialized_ = true;
+  }.bind(this)).catch(function(exception) {
+    if (this.destroyed_) return Promise.resolve();  // Ignore destruction errors
+
+    // Don't rewrap a shaka.util.Error from earlier in the chain:
+    this.currentDrmInfo_ = null;
+    this.supportedTypes_ = null;
+    if (exception instanceof shaka.util.Error) {
+      return Promise.reject(exception);
+    }
+
+    // We failed to create MediaKeys.  This generally shouldn't happen.
+    return Promise.reject(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_CREATE_CDM,
+        exception.message));
+  }.bind(this));
+
+  if (!isEncryptedContent) {
+    // It doesn't matter if we fail to initialize the drm engine, if we won't
+    // actually need it anyway.
+    p = p.catch(() => {});
+  }
+
+  instigator.reject();
+  return p;
+};
+
+
+/**
+ * Use this.config_ to fill in missing values in drmInfo.
+ * @param {shaka.extern.DrmInfo} drmInfo
+ * @private
+ */
+shaka.media.DrmEngine.prototype.fillInDrmInfoDefaults_ = function(drmInfo) {
+  let keySystem = drmInfo.keySystem;
+
+  if (!keySystem) {
+    // This is a placeholder from the manifest parser for an unrecognized key
+    // system.  Skip this entry, to avoid logging nonsensical errors.
+    return;
+  }
+
+  if (!drmInfo.licenseServerUri) {
+    let server = this.config_.servers[keySystem];
+    if (server) {
+      drmInfo.licenseServerUri = server;
+    }
+  }
+
+  if (!drmInfo.keyIds) {
+    drmInfo.keyIds = [];
+  }
+
+  let advanced = this.config_.advanced[keySystem];
+  if (advanced) {
+    if (!drmInfo.distinctiveIdentifierRequired) {
+      drmInfo.distinctiveIdentifierRequired =
+          advanced.distinctiveIdentifierRequired;
+    }
+
+    if (!drmInfo.persistentStateRequired) {
+      drmInfo.persistentStateRequired = advanced.persistentStateRequired;
+    }
+
+    if (!drmInfo.videoRobustness) {
+      drmInfo.videoRobustness = advanced.videoRobustness;
+    }
+
+    if (!drmInfo.audioRobustness) {
+      drmInfo.audioRobustness = advanced.audioRobustness;
+    }
+
+    if (!drmInfo.serverCertificate) {
+      drmInfo.serverCertificate = advanced.serverCertificate;
+    }
+  }
+};
+
+
+/**
+ * Create a DrmInfo using configured clear keys.
+ * The server URI will be a data URI which decodes to a clearkey license.
+ * @return {?shaka.extern.DrmInfo} or null if clear keys are not configured.
+ * @private
+ * @see https://bit.ly/2K8gOnv for the spec on the clearkey license format.
+ */
+shaka.media.DrmEngine.prototype.configureClearKey_ = function() {
+  let hasClearKeys = !shaka.util.MapUtils.empty(this.config_.clearKeys);
+  if (!hasClearKeys) return null;
+
+  const StringUtils = shaka.util.StringUtils;
+  const Uint8ArrayUtils = shaka.util.Uint8ArrayUtils;
+  let keys = [];
+  let keyIds = [];
+
+  for (let keyIdHex in this.config_.clearKeys) {
+    let keyHex = this.config_.clearKeys[keyIdHex];
+
+    let keyId = Uint8ArrayUtils.fromHex(keyIdHex);
+    let key = Uint8ArrayUtils.fromHex(keyHex);
+    let keyObj = {
+      kty: 'oct',
+      kid: Uint8ArrayUtils.toBase64(keyId, false),
+      k: Uint8ArrayUtils.toBase64(key, false),
+    };
+
+    keys.push(keyObj);
+    keyIds.push(keyObj.kid);
+  }
+
+  let jwkSet = {keys: keys};
+  let license = JSON.stringify(jwkSet);
+
+  // Use the keyids init data since is suggested by EME.
+  // Suggestion: https://bit.ly/2JYcNTu
+  // Format: https://www.w3.org/TR/eme-initdata-keyids/
+  let initDataStr = JSON.stringify({'kids': keyIds});
+  let initData = new Uint8Array(StringUtils.toUTF8(initDataStr));
+  let initDatas = [{initData: initData, initDataType: 'keyids'}];
+
+  return {
+    keySystem: 'org.w3.clearkey',
+    licenseServerUri: 'data:application/json;base64,' + window.btoa(license),
+    distinctiveIdentifierRequired: false,
+    persistentStateRequired: false,
+    audioRobustness: '',
+    videoRobustness: '',
+    serverCertificate: null,
+    initData: initDatas,
+    keyIds: [],
+  };
+};
+
+
+/**
+ * Creates a DrmInfo object describing the settings used to initialize the
+ * engine.
+ *
+ * @param {string} keySystem
+ * @param {MediaKeySystemConfiguration} config
+ * @param {!Array.&lt;shaka.extern.DrmInfo>} drmInfos
+ * @private
+ */
+shaka.media.DrmEngine.prototype.createCurrentDrmInfo_ = function(
+    keySystem, config, drmInfos) {
+  /** @type {!Array.&lt;string>} */
+  let licenseServers = [];
+
+  /** @type {!Array.&lt;!Uint8Array>} */
+  let serverCerts = [];
+
+  /** @type {!Array.&lt;!shaka.extern.InitDataOverride>} */
+  let initDatas = [];
+
+  /** @type {!Array.&lt;string>} */
+  let keyIds = [];
+
+  this.processDrmInfos_(drmInfos, licenseServers, serverCerts, initDatas,
+      keyIds);
+
+  if (serverCerts.length > 1) {
+    shaka.log.warning('Multiple unique server certificates found! ' +
+                      'Only the first will be used.');
+  }
+
+  if (licenseServers.length > 1) {
+    shaka.log.warning('Multiple unique license server URIs found! ' +
+                      'Only the first will be used.');
+  }
+
+  // TODO: This only works when all DrmInfo have the same robustness.
+  let audioRobustness =
+      config.audioCapabilities ? config.audioCapabilities[0].robustness : '';
+  let videoRobustness =
+      config.videoCapabilities ? config.videoCapabilities[0].robustness : '';
+  this.currentDrmInfo_ = {
+    keySystem: keySystem,
+    licenseServerUri: licenseServers[0],
+    distinctiveIdentifierRequired: (config.distinctiveIdentifier == 'required'),
+    persistentStateRequired: (config.persistentState == 'required'),
+    audioRobustness: audioRobustness,
+    videoRobustness: videoRobustness,
+    serverCertificate: serverCerts[0],
+    initData: initDatas,
+    keyIds: keyIds,
+  };
+};
+
+
+/**
+ * Extract license server, server cert, and init data from DrmInfos, taking
+ * care to eliminate duplicates.
+ *
+ * @param {!Array.&lt;shaka.extern.DrmInfo>} drmInfos
+ * @param {!Array.&lt;string>} licenseServers
+ * @param {!Array.&lt;!Uint8Array>} serverCerts
+ * @param {!Array.&lt;!shaka.extern.InitDataOverride>} initDatas
+ * @param {!Array.&lt;string>} keyIds
+ * @private
+ */
+shaka.media.DrmEngine.prototype.processDrmInfos_ =
+    function(drmInfos, licenseServers, serverCerts, initDatas, keyIds) {
+  /** @type {function(shaka.extern.InitDataOverride,
+   *                  shaka.extern.InitDataOverride):boolean} */
+  let initDataOverrideEqual = (a, b) => {
+    if (a.keyId &amp;&amp; a.keyId == b.keyId) {
+      // Two initDatas with the same keyId are considered to be the same,
+      // unless that "same keyId" is null.
+      return true;
+    }
+    return a.initDataType == b.initDataType &amp;&amp;
+           shaka.util.Uint8ArrayUtils.equal(a.initData, b.initData);
+  };
+
+  drmInfos.forEach((drmInfo) => {
+    // Aliases:
+    const ArrayUtils = shaka.util.ArrayUtils;
+    const Uint8ArrayUtils = shaka.util.Uint8ArrayUtils;
+
+    // Build an array of unique license servers.
+    if (licenseServers.indexOf(drmInfo.licenseServerUri) == -1) {
+      licenseServers.push(drmInfo.licenseServerUri);
+    }
+
+    // Build an array of unique server certs.
+    if (drmInfo.serverCertificate) {
+      if (ArrayUtils.indexOf(serverCerts, drmInfo.serverCertificate,
+                             Uint8ArrayUtils.equal) == -1) {
+        serverCerts.push(drmInfo.serverCertificate);
+      }
+    }
+
+    // Build an array of unique init datas.
+    if (drmInfo.initData) {
+      drmInfo.initData.forEach((initDataOverride) => {
+        if (ArrayUtils.indexOf(initDatas, initDataOverride,
+                               initDataOverrideEqual) == -1) {
+          initDatas.push(initDataOverride);
+        }
+      });
+    }
+
+    if (drmInfo.keyIds) {
+      for (let i = 0; i &lt; drmInfo.keyIds.length; ++i) {
+        if (keyIds.indexOf(drmInfo.keyIds[i]) == -1) {
+          keyIds.push(drmInfo.keyIds[i]);
+        }
+      }
+    }
+  });
+};
+
+
+/**
+ * @param {!MediaEncryptedEvent} event
+ * @private
+ */
+shaka.media.DrmEngine.prototype.onEncrypted_ = function(event) {
+  // Aliases:
+  const Uint8ArrayUtils = shaka.util.Uint8ArrayUtils;
+
+  let initData = new Uint8Array(event.initData);
+
+  // Suppress duplicate init data.
+  // Note that some init data are extremely large and can't portably be used as
+  // keys in a dictionary.
+  for (let i = 0; i &lt; this.activeSessions_.length; ++i) {
+    if (Uint8ArrayUtils.equal(initData, this.activeSessions_[i].initData)) {
+      shaka.log.debug('Ignoring duplicate init data.');
+      return;
+    }
+  }
+
+  this.createTemporarySession_(event.initDataType, initData);
+};
+
+
+/**
+ * @param {string} sessionId
+ * @return {!Promise.&lt;MediaKeySession>}
+ * @private
+ */
+shaka.media.DrmEngine.prototype.loadOfflineSession_ = function(sessionId) {
+  let session;
+  try {
+    session = this.mediaKeys_.createSession('persistent-license');
+  } catch (exception) {
+    let error = new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_CREATE_SESSION,
+        exception.message);
+    this.onError_(error);
+    return Promise.reject(error);
+  }
+
+  this.eventManager_.listen(session, 'message',
+      /** @type {shaka.util.EventManager.ListenerType} */(
+          this.onSessionMessage_.bind(this)));
+  this.eventManager_.listen(session, 'keystatuseschange',
+      this.onKeyStatusesChange_.bind(this));
+
+  let activeSession = {
+    initData: null,
+    session: session,
+    loaded: false,
+    oldExpiration: Infinity,
+    updatePromise: null,
+  };
+  this.activeSessions_.push(activeSession);
+
+  return session.load(sessionId).then(function(present) {
+    if (this.destroyed_) return;
+
+    if (!present) {
+      let i = this.activeSessions_.indexOf(activeSession);
+      goog.asserts.assert(i >= 0, 'Session must be in the array');
+      this.activeSessions_.splice(i, 1);
+
+      this.onError_(new shaka.util.Error(
+          shaka.util.Error.Severity.CRITICAL,
+          shaka.util.Error.Category.DRM,
+          shaka.util.Error.Code.OFFLINE_SESSION_REMOVED));
+      return;
+    }
+
+    // TODO: We should get a key status change event.  Remove once Chrome CDM
+    // is fixed.
+    activeSession.loaded = true;
+    if (this.activeSessions_.every((s) => s.loaded)) {
+      this.allSessionsLoaded_.resolve();
+    }
+
+    return session;
+  }.bind(this), function(error) {
+    if (this.destroyed_) return;
+
+    let i = this.activeSessions_.indexOf(activeSession);
+    goog.asserts.assert(i >= 0, 'Session must be in the array');
+    this.activeSessions_.splice(i, 1);
+
+    this.onError_(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_CREATE_SESSION,
+        error.message));
+  }.bind(this));
+};
+
+
+/**
+ * @param {string} initDataType
+ * @param {!Uint8Array} initData
+ * @private
+ */
+shaka.media.DrmEngine.prototype.createTemporarySession_ =
+    function(initDataType, initData) {
+  let session;
+  try {
+    if (this.isOffline_) {
+      session = this.mediaKeys_.createSession('persistent-license');
+    } else {
+      session = this.mediaKeys_.createSession();
+    }
+  } catch (exception) {
+    this.onError_(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_CREATE_SESSION,
+        exception.message));
+    return;
+  }
+
+  this.eventManager_.listen(session, 'message',
+      /** @type {shaka.util.EventManager.ListenerType} */(
+          this.onSessionMessage_.bind(this)));
+  this.eventManager_.listen(session, 'keystatuseschange',
+      this.onKeyStatusesChange_.bind(this));
+  this.activeSessions_.push({
+    initData: initData,
+    session: session,
+    loaded: false,
+    oldExpiration: Infinity,
+    updatePromise: null,
+  });
+
+  session.generateRequest(initDataType, initData.buffer).catch(function(error) {
+    if (this.destroyed_) return;
+
+    for (let i = 0; i &lt; this.activeSessions_.length; ++i) {
+      if (this.activeSessions_[i].session == session) {
+        this.activeSessions_.splice(i, 1);
+        break;
+      }
+    }
+    this.onError_(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.FAILED_TO_GENERATE_LICENSE_REQUEST,
+        error.message));
+  }.bind(this));
+};
+
+
+/**
+ * @param {!MediaKeyMessageEvent} event
+ * @private
+ */
+shaka.media.DrmEngine.prototype.onSessionMessage_ = function(event) {
+  if (this.delayLicenseRequest_()) {
+    this.mediaKeyMessageEvents_.push(event);
+  } else {
+    this.sendLicenseRequest_(event);
+  }
+};
+
+
+/**
+ * @return {boolean}
+ * @private
+ */
+shaka.media.DrmEngine.prototype.delayLicenseRequest_ = function() {
+  return (this.config_.delayLicenseRequestUntilPlayed &amp;&amp;
+          this.video_.paused &amp;&amp; !this.initialRequestsSent_);
+};
+
+
+/**
+ * Sends a license request.
+ * @param {!MediaKeyMessageEvent} event
+ * @private
+ */
+shaka.media.DrmEngine.prototype.sendLicenseRequest_ = function(event) {
+  /** @type {!MediaKeySession} */
+  let session = event.target;
+
+  let activeSession;
+  for (let i = 0; i &lt; this.activeSessions_.length; i++) {
+    if (this.activeSessions_[i].session == session) {
+      activeSession = this.activeSessions_[i];
+      break;
+    }
+  }
+
+  const requestType = shaka.net.NetworkingEngine.RequestType.LICENSE;
+  let request = shaka.net.NetworkingEngine.makeRequest(
+      [this.currentDrmInfo_.licenseServerUri], this.config_.retryParameters);
+  request.body = event.message;
+  request.method = 'POST';
+  // NOTE: allowCrossSiteCredentials can be set in a request filter.
+
+  if (this.currentDrmInfo_.keySystem == 'com.microsoft.playready' ||
+      this.currentDrmInfo_.keySystem == 'com.chromecast.playready') {
+    this.unpackPlayReadyRequest_(request);
+  }
+
+  this.playerInterface_.netEngine.request(requestType, request).promise
+      .then(function(response) {
+        if (this.destroyed_) return Promise.reject();
+
+        // Request succeeded, now pass the response to the CDM.
+        return session.update(response.data).then(function() {
+          let event = new shaka.util.FakeEvent('drmsessionupdate');
+          this.playerInterface_.onEvent(event);
+
+          if (activeSession) {
+            if (activeSession.updatePromise) {
+              activeSession.updatePromise.resolve();
+            }
+            // In case there are no key statuses, consider this session loaded
+            // after a reasonable timeout.  It should definitely not take 5
+            // seconds to process a license.
+            shaka.media.DrmEngine.timeout_(5000).then(() => {
+              activeSession.loaded = true;
+              if (this.activeSessions_.every((s) => s.loaded)) {
+                this.allSessionsLoaded_.resolve();
+              }
+            });
+          }
+        }.bind(this));
+      }.bind(this), function(error) {
+        // Ignore destruction errors
+        if (this.destroyed_) return Promise.resolve();
+
+        // Request failed!
+        goog.asserts.assert(error instanceof shaka.util.Error,
+                            'Wrong NetworkingEngine error type!');
+        let shakaErr = new shaka.util.Error(
+            shaka.util.Error.Severity.CRITICAL,
+            shaka.util.Error.Category.DRM,
+            shaka.util.Error.Code.LICENSE_REQUEST_FAILED,
+            error);
+        this.onError_(shakaErr);
+        if (activeSession &amp;&amp; activeSession.updatePromise) {
+          activeSession.updatePromise.reject(shakaErr);
+        }
+      }.bind(this)).catch(function(error) {
+        // Ignore destruction errors
+        if (this.destroyed_) return Promise.resolve();
+
+        // Session update failed!
+        let shakaErr = new shaka.util.Error(
+            shaka.util.Error.Severity.CRITICAL,
+            shaka.util.Error.Category.DRM,
+            shaka.util.Error.Code.LICENSE_RESPONSE_REJECTED,
+            error.message);
+        this.onError_(shakaErr);
+        if (activeSession &amp;&amp; activeSession.updatePromise) {
+          activeSession.updatePromise.reject(shakaErr);
+        }
+      }.bind(this));
+};
+
+
+/**
+ * Unpacks PlayReady license requests.  Modifies the request object.
+ * @param {shaka.extern.Request} request
+ * @private
+ */
+shaka.media.DrmEngine.prototype.unpackPlayReadyRequest_ = function(request) {
+  // On IE and Edge, the raw license message is UTF-16-encoded XML.  We need to
+  // unpack the Challenge element (base64-encoded string containing the actual
+  // license request) and any HttpHeader elements (sent as request headers).
+
+  // Example XML:
+
+  // &lt;PlayReadyKeyMessage type="LicenseAcquisition">
+  //   &lt;LicenseAcquisition Version="1">
+  //     &lt;Challenge encoding="base64encoded">{Base64Data}&lt;/Challenge>
+  //     &lt;HttpHeaders>
+  //       &lt;HttpHeader>
+  //         &lt;name>Content-Type&lt;/name>
+  //         &lt;value>text/xml; charset=utf-8&lt;/value>
+  //       &lt;/HttpHeader>
+  //       &lt;HttpHeader>
+  //         &lt;name>SOAPAction&lt;/name>
+  //         &lt;value>http://schemas.microsoft.com/DRM/etc/etc&lt;/value>
+  //       &lt;/HttpHeader>
+  //     &lt;/HttpHeaders>
+  //   &lt;/LicenseAcquisition>
+  // &lt;/PlayReadyKeyMessage>
+
+  let xml = shaka.util.StringUtils.fromUTF16(
+      request.body, true /* littleEndian */, true /* noThrow */);
+  if (xml.indexOf('PlayReadyKeyMessage') == -1) {
+    // This does not appear to be a wrapped message as on IE and Edge.  Some
+    // clients do not need this unwrapping, so we will assume this is one of
+    // them.  Note that "xml" at this point probably looks like random garbage,
+    // since we interpreted UTF-8 as UTF-16.
+    shaka.log.debug('PlayReady request is already unwrapped.');
+    request.headers['Content-Type'] = 'text/xml; charset=utf-8';
+    return;
+  }
+  shaka.log.debug('Unwrapping PlayReady request.');
+  let dom = new DOMParser().parseFromString(xml, 'application/xml');
+
+  // Set request headers.
+  let headers = dom.getElementsByTagName('HttpHeader');
+  for (let i = 0; i &lt; headers.length; ++i) {
+    let name = headers[i].querySelector('name');
+    let value = headers[i].querySelector('value');
+    goog.asserts.assert(name &amp;&amp; value, 'Malformed PlayReady headers!');
+    request.headers[name.textContent] = value.textContent;
+  }
+
+  // Unpack the base64-encoded challenge.
+  let challenge = dom.querySelector('Challenge');
+  goog.asserts.assert(challenge, 'Malformed PlayReady challenge!');
+  goog.asserts.assert(challenge.getAttribute('encoding') == 'base64encoded',
+                      'Unexpected PlayReady challenge encoding!');
+  request.body =
+      shaka.util.Uint8ArrayUtils.fromBase64(challenge.textContent).buffer;
+};
+
+
+/**
+ * @param {!Event} event
+ * @private
+ * @suppress {invalidCasts} to swap keyId and status
+ */
+shaka.media.DrmEngine.prototype.onKeyStatusesChange_ = function(event) {
+  let session = /** @type {!MediaKeySession} */(event.target);
+
+  // Locate the session in the active sessions list.
+  let i;
+  for (i = 0; i &lt; this.activeSessions_.length; ++i) {
+    if (this.activeSessions_[i].session == session) {
+      break;
+    }
+  }
+  goog.asserts.assert(i &lt; this.activeSessions_.length,
+                      'Key status change for inactive session!');
+  if (i == this.activeSessions_.length) return;
+
+  let keyStatusMap = session.keyStatuses;
+  let hasExpiredKeys = false;
+
+  keyStatusMap.forEach(function(status, keyId) {
+    // The spec has changed a few times on the exact order of arguments here.
+    // As of 2016-06-30, Edge has the order reversed compared to the current
+    // EME spec.  Given the back and forth in the spec, it may not be the only
+    // one.  Try to detect this and compensate:
+    if (typeof keyId == 'string') {
+      let tmp = keyId;
+      keyId = /** @type {ArrayBuffer} */(status);
+      status = /** @type {string} */(tmp);
+    }
+
+    // Microsoft's implementation in Edge seems to present key IDs as
+    // little-endian UUIDs, rather than big-endian or just plain array of bytes.
+    // standard: 6e 5a 1d 26 - 27 57 - 47 d7 - 80 46 ea a5 d1 d3 4b 5a
+    // on Edge:  26 1d 5a 6e - 57 27 - d7 47 - 80 46 ea a5 d1 d3 4b 5a
+    // Bug filed: https://bit.ly/2thuzXu
+
+    // NOTE that we skip this if byteLength != 16.  This is used for the IE11
+    // and Edge 12 EME polyfill, which uses single-byte dummy key IDs.
+    if (this.currentDrmInfo_.keySystem == 'com.microsoft.playready' &amp;&amp;
+        keyId.byteLength == 16) {
+      // Read out some fields in little-endian:
+      let dataView = new DataView(keyId);
+      let part0 = dataView.getUint32(0, true /* LE */);
+      let part1 = dataView.getUint16(4, true /* LE */);
+      let part2 = dataView.getUint16(6, true /* LE */);
+      // Write it back in big-endian:
+      dataView.setUint32(0, part0, false /* BE */);
+      dataView.setUint16(4, part1, false /* BE */);
+      dataView.setUint16(6, part2, false /* BE */);
+    }
+
+    // Microsoft's implementation in IE11 seems to never set key status to
+    // 'usable'.  It is stuck forever at 'status-pending'.  In spite of this,
+    // the keys do seem to be usable and content plays correctly.
+    // Bug filed: https://bit.ly/2tpIU3n
+    // Microsoft has fixed the issue on Edge, but it remains in IE.
+    if (this.currentDrmInfo_.keySystem == 'com.microsoft.playready' &amp;&amp;
+        status == 'status-pending') {
+      status = 'usable';
+    }
+
+    if (status != 'status-pending') {
+      this.activeSessions_[i].loaded = true;
+      if (this.activeSessions_.every((s) => s.loaded)) {
+        this.allSessionsLoaded_.resolve();
+      }
+    }
+
+    if (status == 'expired') {
+      hasExpiredKeys = true;
+    }
+
+    let keyIdHex = shaka.util.Uint8ArrayUtils.toHex(new Uint8Array(keyId));
+
+    this.keyStatusByKeyId_[keyIdHex] = status;
+  }.bind(this));
+
+  // If the session has expired, close it.
+  // Some CDMs do not have sub-second time resolution, so the key status may
+  // fire with hundreds of milliseconds left until the stated expiration time.
+  let msUntilExpiration = session.expiration - Date.now();
+  if (msUntilExpiration &lt; 0 || (hasExpiredKeys &amp;&amp; msUntilExpiration &lt; 1000)) {
+    // If this is part of a remove(), we don't want to close the session until
+    // the update is complete.  Otherwise, we will orphan the session.
+    if (!this.activeSessions_[i].updatePromise) {
+      shaka.log.debug('Session has expired', session);
+      this.activeSessions_.splice(i, 1);
+      session.close().catch(() => {});  // Silence uncaught rejection errors
+    }
+  }
+
+  // Batch up key status changes before checking them or notifying Player.
+  // This handles cases where the statuses of multiple sessions are set
+  // simultaneously by the browser before dispatching key status changes for
+  // each of them.  By batching these up, we only send one status change event
+  // and at most one EXPIRED error on expiration.
+  this.keyStatusTimer_.schedule(0.5);
+};
+
+
+/**
+ * @private
+ */
+shaka.media.DrmEngine.prototype.processKeyStatusChanges_ = function() {
+  // If all keys are expired, fire an error.
+  let isExpired = (keyId, status) => status == 'expired';
+
+  const MapUtils = shaka.util.MapUtils;
+  // Note that every() is always true for an empty map,
+  // but we shouldn't fire an error for a lack of key status info.
+  let allExpired = !MapUtils.empty(this.keyStatusByKeyId_) &amp;&amp;
+                   MapUtils.every(this.keyStatusByKeyId_, isExpired);
+
+  if (allExpired) {
+    this.onError_(new shaka.util.Error(
+        shaka.util.Error.Severity.CRITICAL,
+        shaka.util.Error.Category.DRM,
+        shaka.util.Error.Code.EXPIRED));
+  }
+
+  this.playerInterface_.onKeyStatus(this.keyStatusByKeyId_);
+};
+
+
+/**
+ * Returns true if the browser has recent EME APIs.
+ *
+ * @return {boolean}
+ */
+shaka.media.DrmEngine.isBrowserSupported = function() {
+  let basic =
+      !!window.MediaKeys &amp;&amp;
+      !!window.navigator &amp;&amp;
+      !!window.navigator.requestMediaKeySystemAccess &amp;&amp;
+      !!window.MediaKeySystemAccess &amp;&amp;
+      !!window.MediaKeySystemAccess.prototype.getConfiguration;
+
+  return basic;
+};
+
+
+/**
+ * Returns a Promise to a map of EME support for well-known key systems.
+ *
+ * @return {!Promise.&lt;!Object.&lt;string, ?shaka.extern.DrmSupportType>>}
+ */
+shaka.media.DrmEngine.probeSupport = function() {
+  goog.asserts.assert(shaka.media.DrmEngine.isBrowserSupported(),
+                      'Must have basic EME support');
+
+  let tests = [];
+  let testKeySystems = [
+    'org.w3.clearkey',
+    'com.widevine.alpha',
+    'com.microsoft.playready',
+    'com.apple.fps.2_0',
+    'com.apple.fps.1_0',
+    'com.apple.fps',
+    'com.adobe.primetime',
+  ];
+
+  let basicVideoCapabilities = [
+    {contentType: 'video/mp4; codecs="avc1.42E01E"'},
+    {contentType: 'video/webm; codecs="vp8"'},
+  ];
+
+  let basicConfig = {
+    videoCapabilities: basicVideoCapabilities,
+  };
+  let offlineConfig = {
+    videoCapabilities: basicVideoCapabilities,
+    persistentState: 'required',
+    sessionTypes: ['persistent-license'],
+  };
+
+  // Try the offline config first, then fall back to the basic config.
+  let configs = [offlineConfig, basicConfig];
+
+  let support = {};
+  testKeySystems.forEach((keySystem) => {
+    let p = navigator.requestMediaKeySystemAccess(keySystem, configs)
+        .then((access) => {
+          // Edge doesn't return supported session types, but current versions
+          // do not support persistent-license.  If sessionTypes is missing,
+          // assume no support for persistent-license.
+          // TODO: Polyfill Edge to return known supported session types.
+          // Edge bug: https://bit.ly/2IeKzho
+          let sessionTypes = access.getConfiguration().sessionTypes;
+          let persistentState = sessionTypes ?
+              sessionTypes.indexOf('persistent-license') >= 0 : false;
+
+          // Tizen 3.0 doesn't support persistent licenses, but reports that it
+          // does.  It doesn't fail until you call update() with a license
+          // response, which is way too late.
+          // This is a work-around for #894.
+          if (navigator.userAgent.indexOf('Tizen 3') >= 0) {
+            persistentState = false;
+          }
+
+          support[keySystem] = {persistentState: persistentState};
+          return access.createMediaKeys();
+        }).catch(() => {
+          // Either the request failed or createMediaKeys failed.
+          // Either way, write null to the support object.
+          support[keySystem] = null;
+        });
+    tests.push(p);
+  });
+
+  return Promise.all(tests).then(() => support);
+};
+
+
+/**
+ * @private
+ */
+shaka.media.DrmEngine.prototype.onPlay_ = function() {
+  for (let i = 0; i &lt; this.mediaKeyMessageEvents_.length; i++) {
+    this.sendLicenseRequest_(this.mediaKeyMessageEvents_[i]);
+  }
+
+  this.initialRequestsSent_ = true;
+  this.mediaKeyMessageEvents_ = [];
+};
+
+
+/**
+ * Checks if a variant is compatible with the key system.
+ * @param {!shaka.extern.Variant} variant
+ * @return {boolean}
+**/
+shaka.media.DrmEngine.prototype.isSupportedByKeySystem = function(variant) {
+  let keySystem = this.keySystem();
+  return variant.drmInfos.length == 0 ||
+      variant.drmInfos.some((drmInfo) => drmInfo.keySystem == keySystem);
+};
+
+
+/**
+ * Checks if two DrmInfos can be decrypted using the same key system.
+ * Clear content is considered compatible with every key system.
+ *
+ * @param {!Array.&lt;!shaka.extern.DrmInfo>} drms1
+ * @param {!Array.&lt;!shaka.extern.DrmInfo>} drms2
+ * @return {boolean}
+ */
+shaka.media.DrmEngine.areDrmCompatible = function(drms1, drms2) {
+  if (!drms1.length || !drms2.length) return true;
+
+  return shaka.media.DrmEngine.getCommonDrmInfos(
+      drms1, drms2).length > 0;
+};
+
+
+/**
+ * Returns an array of drm infos that are present in both input arrays.
+ * If one of the arrays is empty, returns the other one since clear
+ * content is considered compatible with every drm info.
+ *
+ * @param {!Array.&lt;!shaka.extern.DrmInfo>} drms1
+ * @param {!Array.&lt;!shaka.extern.DrmInfo>} drms2
+ * @return {!Array.&lt;!shaka.extern.DrmInfo>}
+ */
+shaka.media.DrmEngine.getCommonDrmInfos = function(drms1, drms2) {
+  if (!drms1.length) return drms2;
+  if (!drms2.length) return drms1;
+
+  let commonDrms = [];
+
+  for (let i = 0; i &lt; drms1.length; i++) {
+    for (let j = 0; j &lt; drms2.length; j++) {
+      // This method is only called to compare drmInfos of a video and an audio
+      // adaptations, so we shouldn't have to worry about checking robustness.
+      if (drms1[i].keySystem == drms2[j].keySystem) {
+        let drm1 = drms1[i];
+        let drm2 = drms2[j];
+        let initData = [];
+        initData = initData.concat(drm1.initData || []);
+        initData = initData.concat(drm2.initData || []);
+        let keyIds = [];
+        keyIds = keyIds.concat(drm1.keyIds);
+        keyIds = keyIds.concat(drm2.keyIds);
+        let mergedDrm = {
+          keySystem: drm1.keySystem,
+          licenseServerUri: drm1.licenseServerUri || drm2.licenseServerUri,
+          distinctiveIdentifierRequired: drm1.distinctiveIdentifierRequired ||
+              drm2.distinctiveIdentifierRequired,
+          persistentStateRequired: drm1.persistentStateRequired ||
+              drm2.persistentStateRequired,
+          videoRobustness: drm1.videoRobustness || drm2.videoRobustness,
+          audioRobustness: drm1.audioRobustness || drm2.audioRobustness,
+          serverCertificate: drm1.serverCertificate || drm2.serverCertificate,
+          initData: initData,
+          keyIds: keyIds,
+        };
+        commonDrms.push(mergedDrm);
+        break;
+      }
+    }
+  }
+
+  return commonDrms;
+};
+
+
+/**
+ * Called in an interval timer to poll the expiration times of the sessions.  We
+ * don't get an event from EME when the expiration updates, so we poll it so we
+ * can fire an event when it happens.
+ * @private
+ */
+shaka.media.DrmEngine.prototype.pollExpiration_ = function() {
+  this.activeSessions_.forEach(function(session) {
+    let old = session.oldExpiration;
+    let new_ = session.session.expiration;
+    if (isNaN(new_)) {
+      new_ = Infinity;
+    }
+
+    if (new_ != old) {
+      this.playerInterface_.onExpirationUpdated(
+          session.session.sessionId, new_);
+      session.oldExpiration = new_;
+    }
+  }.bind(this));
+};
+
+
+/**
+ * Create a promise that will be resolved after the given amount of time as
+ * elapsed.
+ *
+ * @param {number} ms
+ * @return {!Promise}
+ */
+shaka.media.DrmEngine.timeout_ = function(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:50 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

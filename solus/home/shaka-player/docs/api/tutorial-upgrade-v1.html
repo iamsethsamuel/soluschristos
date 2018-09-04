@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Tutorial: Upgrade Guide, v1 => v2</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <script src="scripts/show-widget.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+
+
+    <section>
+
+<!--
+<header>
+    
+
+    <h2>Upgrade Guide, v1 => v2</h2>
+</header>
+-->
+
+<article>
+    <h1>Shaka Upgrade Guide, v1.x =&gt; v2</h1>
+<p>This is a detailed guide for upgrading from Shaka Player v1 to v2.  It is a bit
+long to read from beginning to end, so feel free to skim or to search for the
+class and method names you are using in your application.</p>
+<h4>What's New in v2?</h4>
+<p>Shaka v2 has several improvements over v1, including:</p>
+<ul>
+<li>Support for multiple DASH Periods</li>
+<li>Support for DASH Location elements</li>
+<li>Support for DASH UTCTiming elements for clock synchronization</li>
+<li>Lower-latency startup</li>
+<li>Simplified API</li>
+<li>Better browser compatibility</li>
+<li>More detailed browser support test</li>
+<li>Numerical error code system</li>
+<li>Clears old data from the buffer to conserve memory</li>
+<li>Buffering state is independent of play/pause</li>
+<li>Distinguishes between subtitle and caption tracks</li>
+<li>Separate audio &amp; text language preferences</li>
+<li>New plugin and build system to extend Shaka</li>
+<li>Cache-friendly networking</li>
+<li>Simpler, mobile-friendly demo app</li>
+<li>HLS support (VOD, Event, and Live)</li>
+<li>DASH trick mode support</li>
+<li>Support for jumping gaps in the timeline</li>
+<li>Additional stats and events from Player</li>
+<li>Indication of critical errors vs recoverable errors</li>
+<li>Allowing applications to render their own text tracks</li>
+<li>Making the default ABR manager more configurable</li>
+<li>Adding channel count and bandwidth info to variant tracks</li>
+<li>Xlink support in DASH</li>
+<li>New option for offline protected content without persistent licensing</li>
+<li>MPEG-2 TS content can be transmuxed to MP4 for playback on all browsers</li>
+<li>Captions are not streamed until they are shown</li>
+<li>Use NetworkInformation API to get initial bandwidth estimate</li>
+<li>The demo app is now a Progressive Web App (PWA) and can be used offline</li>
+<li>Support for CEA captions in TS content</li>
+<li>Support for TTML and VTT regions</li>
+<li>A video element is no longer required when <code>Player</code> is constructed</li>
+<li>New <code>attach()</code> and <code>detach()</code> methods have been added to <code>Player</code> to manage
+attachment to video elements</li>
+<li>Fetch is now preferred over XHR when available</li>
+<li>Network requests are now abortable</li>
+<li>Live stream playback can begin at a negative offset from the live edge</li>
+</ul>
+<h4>Shaka Plugins</h4>
+<p>Shaka v2 has a new, cleaner architecture than v1 based on plugins.  In v2,
+networking, manifest parsing, and subtitle/caption parsing are all plugins.</p>
+<p>We bundle some default plugins (HTTP support, DASH support, and WebVTT), and
+we plan to expand this list in future releases.  Application developers can
+write their own plugins as well.  Plugins can either be compiled into the
+library, or they can live outside the library in the application.  Application
+developers can also customize the build to exclude any default plugins they
+don't need.</p>
+<p>For a more in-depth discussion of plugins, check out <a href="tutorial-plugins.html">Plugins and Customizing the Build</a>.</p>
+<h4>Namespace</h4>
+<p>In v1, the <code>Player</code> class was namespaced as <code>shaka.player.Player</code>.  In v2, this
+has been simplified to <code>shaka.Player</code>.</p>
+<h4>load()</h4>
+<p>Before, you needed a <code>DashVideoSource</code> or other <code>IVideoSource</code> subclass to pass
+to <code>player.load()</code>.  The video source was constructed with a manifest URL:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var player = new shaka.player.Player(video);
+var videoSource = new shaka.player.DashVideoSource(manifestUri);
+player.load(videoSource);
+</code></pre>
+<p>In v2, the entire video source concept is gone from the API.  Now, you pass the
+URL directly to the player, and it decides which manifest parser plugin to use
+based on the file extension or MIME type:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var player = new shaka.Player(video);
+player.load(manifestUri);
+</code></pre>
+<h4>Promise polyfill for IE</h4>
+<p>Prior to v2.4, we had our own polyfill of <code>Promise</code> for IE 11 support.  In v2.4,
+we have dropped that polyfill.  To support IE 11 in your application, you MUST
+install a <code>Promise</code> polyfill separately.  We recommend <a href="https://github.com/lahmatiy/es6-promise-polyfill">es6-promise-polyfill</a>
+for that purpose.</p>
+<h4>ContentProtection callbacks</h4>
+<p>Shaka v1's <code>DashVideoSource</code> had a parameter for a <code>ContentProtection</code> callback.
+This callback was required to play protected content because Shaka did not
+interpret <code>ContentProtection</code> elements in the DASH manifest and could not
+derive the license server URI automatically:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+function interpretContentProtection(schemeIdUri, contentProtectionElement) {
+  if (schemeIdUri.toLowerCase() ==
+      'urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed') {
+    // This is the UUID which represents Widevine.
+    return [{
+      'keySystem': 'com.widevine.alpha',
+      'licenseServerUrl': 'https://proxy.uat.widevine.com/proxy'
+    }];
+  } else if (schemeIdUri.toLowerCase() ==
+      'urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95') {
+    // This is the UUID which represents PlayReady.
+    return [{
+      'keySystem': 'com.microsoft.playready',
+      'licenseServerUrl':
+          'https://playready.directtaps.net/pr/svc/rightsmanager.asmx'
+    }];
+  } else {
+    return null;
+  }
+}
+var player = new shaka.player.Player(video);
+var videoSource = new shaka.player.DashVideoSource(
+    manifestUri, interpretContentProtection);
+player.load(videoSource);
+</code></pre>
+<p>In v2, these callbacks are <em>only</em> required for <em>non-standard</em> ContentProtection
+schemes, such as that used by YouTube's demo assets.  For the 99% of you who are
+using standard schemes, no callback is required.  Simply <code>configure()</code> the
+player with your license servers:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var player = new shaka.Player(video);
+player.configure({
+  drm: {
+    servers: {
+      'com.widevine.alpha': 'https://proxy.uat.widevine.com/proxy'
+      'com.microsoft.playready':
+          'https://playready.directtaps.net/pr/svc/rightsmanager.asmx'
+    }
+  }
+});
+player.load(manifestUri);
+</code></pre>
+<p>For a more in-depth discussion of DRM configuration, see <a href="tutorial-drm-config.html">DRM Configuration</a>.</p>
+<p>If you need to support a custom ContentProtection scheme, you can still do so
+with a callback set through <code>player.configure()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+function interpretContentProtection(contentProtectionElement) {
+  if (contentProtectionElement.getAttribute('schemeIdUri') ==
+      'http://youtube.com/drm/2012/10/10') {
+    var configs = [];
+    for (....) {
+      configs.push({
+        'keySystem': keySystem,
+        // WATCH OUT: now called URI not URL
+        'licenseServerUri': licenseServerUri
+      });
+    }
+    return configs;
+  }
+}
+
+var player = new shaka.Player(video);
+player.configure({
+  manifest: {
+    dash: {
+      customScheme: interpretContentProtection
+    }
+  }
+});
+player.load(manifestUri);
+</code></pre>
+<p>For more on what you can specify for a custom scheme, see the docs for
+<a href="shaka.extern.html#.DrmInfo">shaka.extern.DrmInfo</a>.</p>
+<h4>Detailed DrmInfo</h4>
+<p>Shaka v1's ContentProtection callbacks could return a detailed DrmInfo object
+with lots of EME-related and license-request-related settings:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+function interpretContentProtection(schemeIdUri, contentProtectionElement) {
+  if (schemeIdUri.toLowerCase() ==
+      'urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed') {
+    return [{
+      'keySystem': 'com.widevine.alpha',
+      'licenseServerUrl': 'https://proxy.uat.widevine.com/proxy',
+
+      'distinctiveIdentifierRequired': true,
+      'persistentStateRequired': false,
+      'serverCertificate': certificateUint8Array,
+      'audioRobustness': 'HW_SECURE_ALL',
+      'videoRobustness': 'HW_SECURE_ALL',
+      'initData': { 'initDataType': 'cenc', 'initData': initDataUint8Array },
+
+      'licensePreProcessor': licensePreProcessor,
+      'licensePostProcessor': licensePostProcessor,
+      'withCredentials': true
+    }];
+  } else {
+    return null;
+  }
+}
+function licensePreProcessor(requestInfo) {
+  // Only called for license requests.
+
+  // Wrap the body, which is an ArrayBuffer:
+  var newBody = wrapLicenseRequest(requestInfo.body);
+  requestInfo.body = newBody;
+
+  // Add a header:
+  requestInfo.headers['foo'] = 'bar';
+}
+function licensePostProcessor(license) {
+  // Only called for license responses.
+  // Unwrap the license, which is a Uint8Array, use/store the extra data:
+  var rawLicense = unwrapLicense(license);
+  // Now return the raw license, which is also a Uint8Array:
+  return rawLicense;
+}
+</code></pre>
+<p>In v2, the EME settings have moved to the <code>drm.advanced</code> field of the config
+object:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.configure({
+  drm: {
+    advanced: {
+      'com.widevine.alpha': {
+        distinctiveIdentifierRequired: true,
+        persistentStateRequired: true,
+        serverCertificate: certificateUint8Array,
+        audioRobustness: 'HW_SECURE_ALL',
+        videoRobustness: 'HW_SECURE_ALL',
+        // NOTE: initData is now an array of one or more overrides:
+        initData: [{ initDataType: 'cenc', initData: initDataUint8Array }]
+      }
+    }
+  }
+});
+</code></pre>
+<p>For a discussion of advanced DRM configuration, see <a href="tutorial-drm-config.html">DRM Configuration</a>.</p>
+<p>Shaka v1's license-request-related settings have moved to v2's network filters.</p>
+<p>Network filters are a generic filtering system for all networking, including
+license requests and responses.  They are more general and flexible, so they
+take slightly more effort than the old preprocessor/postprocessor system.
+However, in v2, you only need to filter your license traffic for two reasons:</p>
+<ul>
+<li>if you use cross-site credentials (v1's &quot;withCredentials&quot; flag)</li>
+<li>if you wrap/unwrap license requests and responses into some other format</li>
+</ul>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.getNetworkingEngine().registerRequestFilter(licensePreProcessor);
+player.getNetworkingEngine().registerResponseFilter(licensePostProcessor);
+
+function licensePreProcessor(type, request) {
+  // A generic filter for all requests, so filter on type LICENSE:
+  if (type != shaka.net.NetworkingEngine.RequestType.LICENSE) return;
+
+  // Equivalent to v1's 'withCredentials': true
+  request.allowCrossSiteCredentials = true;
+
+  // Wrap the request data, which is an ArrayBuffer:
+  var newData = wrapLicenseRequest(request.data);
+  request.data = newData;
+
+  // Add a header:
+  request.headers['foo'] = 'bar';
+}
+function licensePostProcessor(type, response) {
+  // A generic filter for all responses, so filter on type LICENSE:
+  if (type != shaka.net.NetworkingEngine.RequestType.LICENSE) return;
+
+  // Unwrap the response, which is an ArrayBuffer, use/store the extra data:
+  var rawLicense = unwrapLicense(response.data);
+  // Instead of returning the raw license, store it back to the response:
+  response.data = rawLicense;
+  // Return nothing.
+}
+</code></pre>
+<p>For more on request filters, see the docs for
+shaka.net.NetworkingEngine.RequestFilter, <a href="shaka.extern.html#.Request">shaka.extern.Request</a>,
+shaka.net.NetworkingEngine.ResponseFilter, <a href="shaka.extern.html#.Response">shaka.extern.Response</a>.</p>
+<h4>ClearKey configuration</h4>
+<p>Shaka v1's <code>ContentProtection</code> callbacks could be used for ClearKey, but it
+required you to craft both a data URI and fake init data in the correct format:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+function interpretContentProtection(schemeIdUri, contentProtectionElement) {
+  var keyid;  // as Uint8Array
+  var key;  // as Uint8Array
+  var keyObj = {
+    kty: 'oct',
+    kid: Uint8ArrayUtils.toBase64(keyid, false),
+    k: Uint8ArrayUtils.toBase64(key, false)
+  };
+  var jwkSet = {keys: [keyObj]};
+  var license = JSON.stringify(jwkSet);
+  var initData = {
+    'initData': keyid,
+    'initDataType': 'webm'
+  };
+  var licenseServerUrl = 'data:application/json;base64,' +
+      window.btoa(license);
+  return [{
+    'keySystem': 'org.w3.clearkey',
+    'licenseServerUrl': licenseServerUrl,
+    'initData': initData
+  }];
+}
+</code></pre>
+<p>In v2, this has been simplified through <code>player.configure()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.configure({
+  drm: {
+    clearKeys: {
+      'deadbeefdeadbeefdeadbeefdeadbeef': '18675309186753091867530918675309',
+      '02030507011013017019023029031037': '03050701302303204201080425098033'
+    }
+  }
+});
+</code></pre>
+<p>For more on ClearKey setup, see <a href="tutorial-drm-config.html">DRM Configuration</a>.</p>
+<h4>BandwidthEstimator and AbrManager</h4>
+<p>Shaka v1's <code>DashVideoSource</code> had parameters for applications to inject custom
+BandwidthEstimator and AbrManager implementations.  We even recommended
+injecting BandwithEstimator to get persisted estimates across playbacks:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var player = new shaka.player.Player(video);
+var bandwidthEstimator = new shaka.util.EWMABandwidthEstimator();
+var abrManager = new shaka.media.SimpleAbrManager();
+var videoSource = new shaka.player.DashVideoSource(
+    manifestUri, /* interpretContentProtection */ null, estimator, abrManager);
+player.load(videoSource);
+</code></pre>
+<p>In v2, we rolled the BandwidthEstimator concept into AbrManager.  It is no
+longer necessary to inject an instance to persist estimates across playbacks,
+and custom AbrManagers are now provided via <code>player.configure()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var player = new shaka.Player(video);
+player.configure({
+  abrFactory: MyCustomAbrManager
+});
+player.load(manifestUri);
+</code></pre>
+<p>For more on the AbrManager interface, see the docs for
+<a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a>.</p>
+<h4>Selecting tracks</h4>
+<p>Shaka v1 had separate methods for each type of tracks: <code>getVideoTracks()</code>,
+<code>getAudioTracks()</code>, and <code>getTextTracks()</code>, as well as <code>selectVideoTrack()</code>,
+<code>selectAudioTrack()</code>, and <code>selectTextTrack()</code>.  Tracks were selected by ID.</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var videoTracks = player.getVideoTracks();
+var i = /* choose an index somehow */;
+player.selectVideoTrack(videoTracks[i].id);  // id, specifically video
+</code></pre>
+<p>In Shaka v2, audio and video tracks are combined into a variant track.  It is
+not possible to select individual audio/video streams, you can only select a
+specific variant as specified by the manifest.</p>
+<p>You can get the currently available tracks using <code>getVariantTracks()</code> and
+<code>getTextTracks()</code>.  To switch tracks, use <code>selectVariantTrack()</code> and
+<code>selectTextTrack()</code>, passing in the whole track object.</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var variantTracks = player.getVariantTracks();
+var i = /* choose an index somehow */;
+player.selectVariantTrack(variantTracks[i]);  // whole track
+</code></pre>
+<p>In v1, you could show or hide text tracks with <code>player.enableTextTrack()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+player.enableTextTrack(true);
+</code></pre>
+<p>In v2, this becomes <code>player.setTextTrackVisibility()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.setTextTrackVisibility(true);
+</code></pre>
+<p>See also the <a href="shaka.extern.html#.Track">shaka.extern.Track</a> structure which is used for all track
+types (variant and text).</p>
+<h4>Side-loading captions/subtitles</h4>
+<p>In Shaka v1, you could side-load subtitles that were not present in the manifest
+by calling <code>addExternalCaptions()</code> on the <code>DashVideoSource</code> before <code>load()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var player = new shaka.player.Player(video);
+var videoSource = new shaka.player.DashVideoSource(manifestUri);
+videoSource.addExternalCaptions(textStreamUri, 'fr-CA', 'text/vtt');
+player.load(videoSource);
+</code></pre>
+<p>In v2, this is done on with <code>player.addTextTrack()</code> after load() is complete:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var player = new shaka.Player(video);
+player.load(manifestUri).then(function() {
+  player.addTextTrack(textStreamUri, 'fr-CA', 'caption', 'text/vtt');
+});
+</code></pre>
+<h4>Playback start time</h4>
+<p>Shaka v1's <code>player.setPlaybackStartTime()</code> would let you start playback at an
+arbitrary timestamp.  It had to be called before load():</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+player.setPlaybackStartTime(123.45);
+player.load(manifestUri);
+</code></pre>
+<p>In v2, this is done through an optional parameter on <code>load()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.load(manifestUri, 123.45);
+</code></pre>
+<h4>Trick play</h4>
+<p>Shaka v1 had <code>player.setPlaybackRate()</code> that could be used for trick play by
+emulating negative rate support in <code>video.playbackRate</code>.  If you used
+v1's <code>setPlaybackRate()</code> for trick play, use v2's <code>player.trickPlay()</code>.  For
+other purposes, use <code>video.playbackRate</code> directly.</p>
+<h4>configure()</h4>
+<p>Shaka v1 and v2 both have a <code>player.configure()</code> method.  Here is a map of
+settings in v1 and their equivalents in v2 (most of which are at a different
+level of the configuration hierarchy):</p>
+<ul>
+<li><code>enableAdaptation</code> =&gt; <code>abr.enabled</code></li>
+<li><code>streamBufferSize</code> =&gt; <code>streaming.bufferingGoal</code></li>
+<li><code>licenseRequestTimeout</code> =&gt; <code>drm.retryParameters.timeout</code></li>
+<li><code>mpdRequestTimeout</code> =&gt; <code>manifest.retryParameters.timeout</code></li>
+<li><code>segmentRequestTimeout</code> =&gt; <code>streaming.retryParameters.timeout</code></li>
+<li><code>preferredLanguage</code> =&gt; split into <code>preferredAudioLanguage</code> and
+<code>preferredTextLanguage</code></li>
+<li><code>restrictions</code> =&gt; (same name, see below)</li>
+<li><code>liveStreamEndTimeout</code> =&gt; (not needed in v2)</li>
+<li><code>disableCacheBustingEvenThoughItMayAffectBandwidthEstimation</code> =&gt;
+(not needed, always cache-friendly)</li>
+</ul>
+<p>The <code>shaka.player.Restriction</code> type was replaced by a simple record type.  So
+instead of constructing an object, simply create an anonymous JavaScript object.
+<code>minPixels</code>/<code>maxPixels</code> were added to limit total pixels. Also <code>minBandwidth</code>
+and <code>maxBandwidth</code> were split into <code>minAudioBandwidth</code>, <code>maxAudioBandwidth</code>,
+<code>minVideoBandwidth</code>, and <code>maxVideoBandwidth</code>, see
+<a href="shaka.extern.html#.Restrictions">shaka.extern.Restrictions</a>.</p>
+<p>For more information on configuration in v2, see <a href="tutorial-config.html">Configuration</a>,
+<a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a>, and <a href="tutorial-drm-config.html">DRM Configuration</a>.</p>
+<h4>getStats()</h4>
+<p>Shaka v1 had <code>player.getStats()</code>.  Shaka v2 has a similar method, but it returns
+a somewhat different structure.</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+player.getStats()
+
+=> Object
+  streamStats: StreamStats  // refers to currently selected video stream
+    videoWidth: number  // pixels
+    videoHeight: number  // pixels
+    videoMimeType: string
+    videoBandwidth: number  // bits/sec
+  decodedFrames: number
+  droppedFrames: number
+  estimatedBandwidth: number  // bits/sec
+  playTime: number  // seconds
+  bufferingTime: number  // seconds
+  playbackLatency: number  // seconds
+  bufferingHistory: Array  // of timestamps when we started buffering
+  bandwidthHistory: Array of Objects
+    timestamp: number  // seconds, when bandwidth estimate was made
+    value: number  // bandwidth estimate, bits/sec
+  streamHistory: Array of Objects
+    timestamp: number  // seconds, when video stream changed
+    value: StreamStats  // information about the selected stream, video only
+</code></pre>
+<p>Shaka v2 does not expose playback latency or a history of bandwidth estimates.
+v2's <code>switchHistory</code> is more general than v1's <code>streamHistory</code>, and covers all
+stream types:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.getStats()
+
+=> Object
+  width: number // pixels, current video track
+  height: number  // pixels, current video track
+  streamBandwidth: number  // bits/sec, total for all current streams
+  decodedFrames: number  // same as v1
+  droppedFrames: number  // same as v1
+  estimatedBandwidth: number  // bits/sec, same as v1
+  loadLatency: number,  // seconds between load() and the video's loadend event
+  playTime: number  // seconds, same as v1
+  bufferingTime: number  // seconds, same as v1
+  switchHistory: Array of Objects  // replaces v1's streamHistory
+    timestamp: number  // seconds, when the stream was selected
+    id: number  // track ID
+    type: string  // 'variant' or 'text'
+    fromAdaptation: boolean  // distinguishes between ABR and manual choices
+    bandwidth: ?number // track's bandwidth (null for text tracks)
+  stateChange: Array of Objects
+    timestamp: number  // seconds, when the state changed
+    state: string  // 'buffering', 'playing', 'paused', or 'ended'
+    duration: number  // seconds in this state
+</code></pre>
+<p>For more on stats in v2, see <a href="shaka.extern.html#.Stats">shaka.extern.Stats</a>.</p>
+<h4>Player events</h4>
+<p>In both Shaka v1 and v2, <code>Player</code> emits events.  Here is a map of events and
+their properties in v1 and their equivalents in v2:</p>
+<ul>
+<li><code>error</code> =&gt; <code>error</code>
+<ul>
+<li><code>detail</code> (various types) =&gt; <code>detail</code> (<a href="shaka.util.Error.html">shaka.util.Error</a>)
+<ul>
+<li><code>type</code> (vague string) =&gt; <code>category</code>
+(number, unambiguous <a href="shaka.util.Error.html#.Category">error category</a>)</li>
+<li><code>message</code> (vague string) =&gt; <code>code</code>
+(number, unambiguous <a href="shaka.util.Error.html#.Code">error code</a>)</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>bufferingStart</code> and <code>bufferingEnd</code> =&gt; combined into <code>buffering</code>
+<ul>
+<li>(no v1 equivalent) =&gt; <code>buffering</code>
+(boolean, true when we enter buffering state, false when we leave)</li>
+</ul>
+</li>
+<li>(no v1 equivalent) =&gt;
+<code>texttrackvisibility</code></li>
+<li><code>trackschanged</code> =&gt; <code>trackschanged</code></li>
+<li><code>seekrangechanged</code> =&gt;
+(no v2 equivalent, use <code>player.seekRange()</code> when updating the UI)</li>
+<li><code>adaptation</code> =&gt; <code>adaptation</code>
+<ul>
+<li><code>contentType</code> (string) =&gt; (no v2 equivalent)</li>
+<li><code>size</code> (width:number, height:number) =&gt; (no v2 equivalent)</li>
+<li><code>bandwidth</code> (number) =&gt; (no v2 equivalent)</li>
+</ul>
+</li>
+</ul>
+<p>For more information on events, see the Events section of <a href="shaka.Player.html">shaka.Player</a>.</p>
+<h4>Browser support testing</h4>
+<p>In Shaka v1, you could check if a browser was supported or not using
+<code>shaka.player.Player.isBrowserSupported()</code>:</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+if (!shaka.player.Player.isBrowserSupported()) {
+  // Show an error and abort.
+}
+</code></pre>
+<p>In v2, the same method exists to detect support.  For diagnostics there is a new
+method that will get more detailed information about the browser.  This will
+involve making a number of queries to EME which may result in user prompts,
+so it is suggested this only be used for diagnostics:</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+if (!shaka.Player.isBrowserSupported()) {
+  // Show an error and abort.
+} else {
+  // Only call this method if the browser is supported.
+  shaka.Player.probeSupport().then(function(support) {
+    // The check is asynchronous because the EME API is asynchronous.
+    // The support object contains much more information about what the browser
+    // offers, if you need it.  For example, if you require both Widevine and
+    // WebM/VP9:
+    if (!support.drm['com.widevine.alpha'] ||
+        !support.media['video/webm; codecs=&quot;vp9&quot;']) {
+      // Show an error and abort.
+    }
+  });
+}
+</code></pre>
+<p>For more on the support object, check out <a href="shaka.extern.html#.SupportType">shaka.extern.SupportType</a>.
+You can also see the full <code>probeSupport()</code> report for your browser at:
+<a href="http://shaka-player-demo.appspot.com/support.html">http://shaka-player-demo.appspot.com/support.html</a></p>
+<h4>HttpVideoSource</h4>
+<p>There is no equivalent to v1's <code>HttpVideoSource</code>.  Shaka v2 only supports
+playback via MSE.  This is much simpler and allowed us to remove many special
+cases from the code.</p>
+<h4>Offline storage</h4>
+<p>In v1, to store offline content you used an <code>OfflineVideoSource</code>.</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+function chooseStreams() {
+  return Promise.resolve(trackIds);
+}
+
+function onProgress(evt) {
+  console.log('Stored ' + evt.detail + '%');
+}
+
+var videoSource = new shaka.player.OfflineVideoSource(null, null);
+videoSource.addEventListener('progress', onProgress);
+
+var promise = videoSource.store('https://url', 'en-US', null, chooseStreams);
+promise.then(function(groupId) {
+  console.log('Stored at group ID ' + groupId);
+});
+</code></pre>
+<p>In v2 you use the <code>Storage</code> class to store offline content.</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+function chooseTracks(allTracks) {
+  return filteredTracks;
+}
+
+function onProgress(storedContent, percent) {
+  console.log('Stored ' + percent + '%');
+}
+
+var storage = new shaka.offline.Storage(player);
+// Optional
+storage.configure({
+  trackSelectionCallback: chooseTracks,
+  progressCallback: onProgress
+});
+
+var promise = storage.store('https://url', {extra: 'data'});
+promise.then(function(storedContent) {
+  console.log('Can be loaded using url: ' + storedContent.offlineUri);
+});
+</code></pre>
+<h4>Offline playback</h4>
+<p>In v1, you also used <code>OfflineVideoSource</code> to load the stored content.</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var videoSource = new shaka.player.OfflineVideoSource(groupId, null);
+player.load(videoSource);
+</code></pre>
+<p>In v2, you don't have to use any special types so long as you know the URL to
+use.  When storing the content, you get a special URL that is simply passed to
+<code>load</code> like any other URL.  You can also get the info by listing all stored
+content.</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+player.load(offlineUri);
+</code></pre>
+<h4>Offline listing and deleting</h4>
+<p>In v1, you used <code>OfflineVideoSource</code> to list and delete content.</p>
+<pre class="prettyprint source lang-js"><code>// v1:
+var videoSource = new shaka.player.OfflineVideoSource(null, null);
+
+videoSource.retrieveGroupIds().then(function(groupIds) {
+  console.log(groupIds[0]);
+});
+
+var sourceToDelete = new shaka.player.OfflineVideoSource(groupId, null);
+sourceToDelete.deleteGroup().then(function() {
+  console.log('Done');
+});
+</code></pre>
+<p>In v2, you use <code>Storage</code> to list and delete stored content.</p>
+<pre class="prettyprint source lang-js"><code>// v2:
+var storage = new shaka.offline.Storage(player);
+
+storage.list().then(function(storedContents) {
+  var firstInfo = storedContents[0];
+  var url = firstInfo.offlineUri;
+  player.load(url);
+});
+
+storage.remove(storedContent.offlineUri).then(function() {
+  console.log('Done');
+});
+</code></pre>
+</article>
+
+</section>
+
+</div>
+
+<nav>
+    <div id="showWidget">Show:
+        <select id="show" onchange="onShowChange()">
+            <option value="exported">exported</option>
+            <option value="public">public</option>
+            <option value="private">everything</option>
+        </select>
+    </div>
+
+    <h2><a href="index.html">Home</a></h2><h3>Tutorials</h3><ul><li class=""><a href="tutorial-welcome.html">Welcome to Shaka Player</a></li><li class=""><a href="tutorial-basic-usage.html">Basic Usage</a></li><li class=""><a href="tutorial-debugging.html">Debugging</a></li><li class=""><a href="tutorial-config.html">Configuration</a></li><li class=""><a href="tutorial-network-and-buffering-config.html">Network and Buffering Configuration</a></li><li class=""><a href="tutorial-drm-config.html">DRM Configuration</a></li><li class=""><a href="tutorial-license-server-auth.html">License Server Authentication</a></li><li class=""><a href="tutorial-license-wrapping.html">License Wrapping</a></li><li class=""><a href="tutorial-plugins.html">Plugins and Customizing the Build</a></li><li class=""><a href="tutorial-manifest-parser.html">Manifest Parser Plugins</a></li><li class=""><a href="tutorial-architecture.html">Architecture Diagrams</a></li><li class=""><a href="tutorial-service-worker.html">Service Worker Caching</a></li><li class=""><a href="tutorial-offline.html">Offline Storage and Playback</a></li><li class=""><a href="tutorial-faq.html">Frequently Asked Questions</a></li><li class=""><a href="tutorial-upgrade.html">Upgrade Guide</a></li></ul><h3>Classes</h3><ul><li class="access-public"><a href="goog.asserts.html">goog.asserts</a></li><li class="access-public"><a href="shaka.html">shaka</a></li><li class="access-public"><a href="shaka.abr.Ewma.html">shaka.abr.Ewma</a></li><li class="access-public"><a href="shaka.abr.EwmaBandwidthEstimator.html">shaka.abr.EwmaBandwidthEstimator</a></li><li class="access-export"><a href="shaka.abr.SimpleAbrManager.html">shaka.abr.SimpleAbrManager</a></li><li class="access-export"><a href="shaka.cast.CastProxy.html">shaka.cast.CastProxy</a></li><li class="access-export"><a href="shaka.cast.CastReceiver.html">shaka.cast.CastReceiver</a></li><li class="access-public"><a href="shaka.cast.CastSender.html">shaka.cast.CastSender</a></li><li class="access-public"><a href="shaka.cast.CastUtils.html">shaka.cast.CastUtils</a></li><li class="access-public"><a href="shaka.dash.ContentProtection.html">shaka.dash.ContentProtection</a></li><li class="access-export"><a href="shaka.dash.DashParser.html">shaka.dash.DashParser</a></li><li class="access-public"><a href="shaka.dash.MpdUtils.html">shaka.dash.MpdUtils</a></li><li class="access-public"><a href="shaka.dash.SegmentBase.html">shaka.dash.SegmentBase</a></li><li class="access-public"><a href="shaka.dash.SegmentList.html">shaka.dash.SegmentList</a></li><li class="access-public"><a href="shaka.dash.SegmentTemplate.html">shaka.dash.SegmentTemplate</a></li><li class="access-export"><a href="shaka.extern.html">shaka.extern</a></li><li class="access-public"><a href="shaka.hls.Attribute.html">shaka.hls.Attribute</a></li><li class="access-export"><a href="shaka.hls.HlsParser.html">shaka.hls.HlsParser</a></li><li class="access-public"><a href="shaka.hls.ManifestTextParser.html">shaka.hls.ManifestTextParser</a></li><li class="access-public"><a href="shaka.hls.Playlist.html">shaka.hls.Playlist</a></li><li class="access-public"><a href="shaka.hls.Segment.html">shaka.hls.Segment</a></li><li class="access-public"><a href="shaka.hls.Tag.html">shaka.hls.Tag</a></li><li class="access-export"><a href="shaka.log.html">shaka.log</a></li><li class="access-public"><a href="shaka.media.DrmEngine.html">shaka.media.DrmEngine</a></li><li class="access-public"><a href="shaka.media.GapJumpingController.html">shaka.media.GapJumpingController</a></li><li class="access-export"><a href="shaka.media.InitSegmentReference.html">shaka.media.InitSegmentReference</a></li><li class="access-export"><a href="shaka.media.ManifestParser.html">shaka.media.ManifestParser</a></li><li class="access-public"><a href="shaka.media.MediaSourceEngine.html">shaka.media.MediaSourceEngine</a></li><li class="access-public"><a href="shaka.media.Playhead.html">shaka.media.Playhead</a></li><li class="access-public"><a href="shaka.media.PlayheadObserver.html">shaka.media.PlayheadObserver</a></li><li class="access-export"><a href="shaka.media.PresentationTimeline.html">shaka.media.PresentationTimeline</a></li><li class="access-export"><a href="shaka.media.SegmentIndex.html">shaka.media.SegmentIndex</a></li><li class="access-export"><a href="shaka.media.SegmentReference.html">shaka.media.SegmentReference</a></li><li class="access-public"><a href="shaka.media.StreamingEngine.html">shaka.media.StreamingEngine</a></li><li class="access-public"><a href="shaka.media.TimeRangesUtils.html">shaka.media.TimeRangesUtils</a></li><li class="access-public"><a href="shaka.media.Transmuxer.html">shaka.media.Transmuxer</a></li><li class="access-public"><a href="shaka.media.VideoWrapper.html">shaka.media.VideoWrapper</a></li><li class="access-public"><a href="shaka.media.WebmSegmentIndexParser.html">shaka.media.WebmSegmentIndexParser</a></li><li class="access-public"><a href="shaka.net.Backoff.html">shaka.net.Backoff</a></li><li class="access-export"><a href="shaka.net.DataUriPlugin.html">shaka.net.DataUriPlugin</a></li><li class="access-export"><a href="shaka.net.HttpFetchPlugin.html">shaka.net.HttpFetchPlugin</a></li><li class="access-export"><a href="shaka.net.HttpPluginUtils.html">shaka.net.HttpPluginUtils</a></li><li class="access-export"><a href="shaka.net.HttpXHRPlugin.html">shaka.net.HttpXHRPlugin</a></li><li class="access-export"><a href="shaka.net.NetworkingEngine.html">shaka.net.NetworkingEngine</a></li><li class="access-public"><a href="shaka.offline.DownloadManager.html">shaka.offline.DownloadManager</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBConnection.html">shaka.offline.indexeddb.DBConnection</a></li><li class="access-public"><a href="shaka.offline.indexeddb.DBOperation.html">shaka.offline.indexeddb.DBOperation</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V1StorageCell.html">shaka.offline.indexeddb.V1StorageCell</a></li><li class="access-public"><a href="shaka.offline.indexeddb.V2StorageCell.html">shaka.offline.indexeddb.V2StorageCell</a></li><li class="access-public"><a href="shaka.offline.ManifestConverter.html">shaka.offline.ManifestConverter</a></li><li class="access-public"><a href="shaka.offline.OfflineManifestParser.html">shaka.offline.OfflineManifestParser</a></li><li class="access-export"><a href="shaka.offline.OfflineScheme.html">shaka.offline.OfflineScheme</a></li><li class="access-public"><a href="shaka.offline.OfflineUri.html">shaka.offline.OfflineUri</a></li><li class="access-export"><a href="shaka.offline.Storage.html">shaka.offline.Storage</a></li><li class="access-public"><a href="shaka.offline.StoredContentUtils.html">shaka.offline.StoredContentUtils</a></li><li class="access-export"><a href="shaka.Player.html">shaka.Player</a></li><li class="access-export"><a href="shaka.polyfill.html">shaka.polyfill</a></li><li class="access-public"><a href="shaka.polyfill.Fullscreen.html">shaka.polyfill.Fullscreen</a></li><li class="access-public"><a href="shaka.polyfill.IndexedDB.html">shaka.polyfill.IndexedDB</a></li><li class="access-public"><a href="shaka.polyfill.InputEvent.html">shaka.polyfill.InputEvent</a></li><li class="access-public"><a href="shaka.polyfill.MathRound.html">shaka.polyfill.MathRound</a></li><li class="access-public"><a href="shaka.polyfill.MediaSource.html">shaka.polyfill.MediaSource</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.html">shaka.polyfill.PatchedMediaKeysMs</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeys.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysMs.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.html">shaka.polyfill.PatchedMediaKeysNop</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeys.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysNop.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.html">shaka.polyfill.PatchedMediaKeysWebkit</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeys</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySession</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeyStatusMap</a></li><li class="access-public"><a href="shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess.html">shaka.polyfill.PatchedMediaKeysWebkit.MediaKeySystemAccess</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlaybackQuality.html">shaka.polyfill.VideoPlaybackQuality</a></li><li class="access-public"><a href="shaka.polyfill.VideoPlayPromise.html">shaka.polyfill.VideoPlayPromise</a></li><li class="access-public"><a href="shaka.polyfill.VTTCue.html">shaka.polyfill.VTTCue</a></li><li class="access-export"><a href="shaka.text.Cue.html">shaka.text.Cue</a></li><li class="access-export"><a href="shaka.text.CueRegion.html">shaka.text.CueRegion</a></li><li class="access-public"><a href="shaka.text.Mp4TtmlParser.html">shaka.text.Mp4TtmlParser</a></li><li class="access-public"><a href="shaka.text.Mp4VttParser.html">shaka.text.Mp4VttParser</a></li><li class="access-export"><a href="shaka.text.SimpleTextDisplayer.html">shaka.text.SimpleTextDisplayer</a></li><li class="access-public"><a href="shaka.text.TextEngine.html">shaka.text.TextEngine</a></li><li class="access-public"><a href="shaka.text.TtmlTextParser.html">shaka.text.TtmlTextParser</a></li><li class="access-private"><a href="shaka.text.TtmlTextParser.RateInfo_.html">shaka.text.TtmlTextParser.RateInfo_</a></li><li class="access-public"><a href="shaka.text.VttTextParser.html">shaka.text.VttTextParser</a></li><li class="access-export"><a href="shaka.util.AbortableOperation.html">shaka.util.AbortableOperation</a></li><li class="access-public"><a href="shaka.util.ArrayUtils.html">shaka.util.ArrayUtils</a></li><li class="access-export"><a href="shaka.util.DataViewReader.html">shaka.util.DataViewReader</a></li><li class="access-public"><a href="shaka.util.Destroyer.html">shaka.util.Destroyer</a></li><li class="access-public"><a href="shaka.util.EbmlElement.html">shaka.util.EbmlElement</a></li><li class="access-public"><a href="shaka.util.EbmlParser.html">shaka.util.EbmlParser</a></li><li class="access-export"><a href="shaka.util.Error.html">shaka.util.Error</a></li><li class="access-public"><a href="shaka.util.EventManager.html">shaka.util.EventManager</a></li><li class="access-private"><a href="shaka.util.EventManager.Binding_.html">shaka.util.EventManager.Binding_</a></li><li class="access-public"><a href="shaka.util.FakeEvent.html">shaka.util.FakeEvent</a></li><li class="access-export"><a href="shaka.util.FakeEventTarget.html">shaka.util.FakeEventTarget</a></li><li class="access-public"><a href="shaka.util.Functional.html">shaka.util.Functional</a></li><li class="access-public"><a href="shaka.util.LanguageUtils.html">shaka.util.LanguageUtils</a></li><li class="access-public"><a href="shaka.util.ManifestParserUtils.html">shaka.util.ManifestParserUtils</a></li><li class="access-public"><a href="shaka.util.MapUtils.html">shaka.util.MapUtils</a></li><li class="access-public"><a href="shaka.util.MimeUtils.html">shaka.util.MimeUtils</a></li><li class="access-export"><a href="shaka.util.Mp4Parser.html">shaka.util.Mp4Parser</a></li><li class="access-public"><a href="shaka.util.MultiMap.html">shaka.util.MultiMap</a></li><li class="access-public"><a href="shaka.util.Pssh.html">shaka.util.Pssh</a></li><li class="access-public"><a href="shaka.util.PublicPromise.html">shaka.util.PublicPromise</a></li><li class="access-public"><a href="shaka.util.StreamUtils.html">shaka.util.StreamUtils</a></li><li class="access-export"><a href="shaka.util.StringUtils.html">shaka.util.StringUtils</a></li><li class="access-public"><a href="shaka.util.TextParser.html">shaka.util.TextParser</a></li><li class="access-public"><a href="shaka.util.Timer.html">shaka.util.Timer</a></li><li class="access-export"><a href="shaka.util.Uint8ArrayUtils.html">shaka.util.Uint8ArrayUtils</a></li><li class="access-public"><a href="shaka.util.XmlUtils.html">shaka.util.XmlUtils</a></li></ul><h3>Interfaces</h3><ul><li class="access-export"><a href="shaka.extern.AbrManager.html">shaka.extern.AbrManager</a></li><li class="access-export"><a href="shaka.extern.Cue.html">shaka.extern.Cue</a></li><li class="access-export"><a href="shaka.extern.CueRegion.html">shaka.extern.CueRegion</a></li><li class="access-export"><a href="shaka.extern.Error.html">shaka.extern.Error</a></li><li class="access-export"><a href="shaka.extern.IAbortableOperation.html">shaka.extern.IAbortableOperation</a></li><li class="access-export"><a href="shaka.extern.ManifestParser.html">shaka.extern.ManifestParser</a></li><li class="access-public"><a href="shaka.extern.StorageCell.html">shaka.extern.StorageCell</a></li><li class="access-public"><a href="shaka.extern.StorageMechanism.html">shaka.extern.StorageMechanism</a></li><li class="access-export"><a href="shaka.extern.TextDisplayer.html">shaka.extern.TextDisplayer</a></li><li class="access-export"><a href="shaka.extern.TextParser.html">shaka.extern.TextParser</a></li><li class="access-export"><a href="shaka.util.IDestroyable.html">shaka.util.IDestroyable</a></li></ul><h3>Events</h3><ul><li class="access-export"><a href="shaka.cast.CastProxy.html#.event:CastStatusChangedEvent">shaka.cast.CastProxy.CastStatusChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:AdaptationEvent">shaka.Player.AdaptationEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:BufferingEvent">shaka.Player.BufferingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:DrmSessionUpdateEvent">shaka.Player.DrmSessionUpdateEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:EmsgEvent">shaka.Player.EmsgEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ErrorEvent">shaka.Player.ErrorEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:ExpirationUpdatedEvent">shaka.Player.ExpirationUpdatedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LargeGapEvent">shaka.Player.LargeGapEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:LoadingEvent">shaka.Player.LoadingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:StreamingEvent">shaka.Player.StreamingEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TextTrackVisibilityEvent">shaka.Player.TextTrackVisibilityEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionAddedEvent">shaka.Player.TimelineRegionAddedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionEnterEvent">shaka.Player.TimelineRegionEnterEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TimelineRegionExitEvent">shaka.Player.TimelineRegionExitEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:TracksChangedEvent">shaka.Player.TracksChangedEvent</a></li><li class="access-export"><a href="shaka.Player.html#.event:UnloadingEvent">shaka.Player.UnloadingEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.0-dev</a> on Thu Jul 19 2018 15:56:54 GMT+0100 (WAT)
+</footer>
+
+<script> initShowWidget(); </script>
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

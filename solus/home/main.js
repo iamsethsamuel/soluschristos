@@ -308,3 +308,11 @@ function showNotifications() {
     document.querySelector("#notificationDetails").style.display = "none":
     document.querySelector("#notificationDetails").style.display = "block"
 }
+function confirmation(){
+    if(document.querySelector("#password").value !== document.querySelector("#confirm").value){
+    console.log(document.querySelector("#password").value,document.querySelector("#confirm").value);
+    document.querySelector("#warn").innerText = "Passwords did not match"        
+    }else{
+    document.querySelector("#warn").innerText = ""
+    }  
+}

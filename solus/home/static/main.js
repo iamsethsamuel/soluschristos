@@ -173,7 +173,6 @@ function addPic(){
  
 function textAreaFunc(){
     if(! document.getElementById("postFormSubmit")){
-        let content = document.getElementById("postContent")
         let postForm = document.getElementById("postForm")
         let newElement = document.createElement("input")
         let p = document.createElement("p")
@@ -307,4 +306,12 @@ function showNotifications() {
     document.querySelector("#notificationDetails").style.display == "block"?
     document.querySelector("#notificationDetails").style.display = "none":
     document.querySelector("#notificationDetails").style.display = "block"
+}
+function confirmation(){
+    if(document.querySelector("#password").value !== document.querySelector("#confirm").value){
+    console.log(document.querySelector("#password").value,document.querySelector("#confirm").value);
+    document.querySelector("#warn").innerText = "Passwords did not match"        
+    }else{
+    document.querySelector("#warn").innerText = ""
+    }  
 }

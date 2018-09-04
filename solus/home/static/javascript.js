@@ -326,10 +326,11 @@ function initPlayer(vid,vurl,id){
     video.addEventListener("canplay",()=>{
         video.play()
     })
-    // {
-    //     let vposter = vurl.replace("mpd","jpg")
-    //     video.poster = vposter
-    // }
+    {
+        // let vposter = vurl.replace("mpd","jpg")
+        
+        // video.poster = vposter
+    }
     window.player = player
     player.addEventListener("error", onErrorEvent)
     player.configure({
@@ -406,3 +407,8 @@ window.addEventListener("scroll",()=>{
      }
     
 })
+
+function posterFunc(vUrl,vId){
+    let video = document.getElementById("vid"+vId)
+    video.setAttribute("poster",vUrl.replace("mpd","jpg"))
+}

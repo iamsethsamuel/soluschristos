@@ -6,8 +6,9 @@
         <form method="post" enctype="multipart/form-data" class="form-outline">
             {% csrf_token %}
             <input name="username" type="text" class="form-control" placeholder="Username" required/><br>
-            <input name="password" type="password" placeholder="Choose an 8 digit password" class="form-control" required><br>
-            <input name="c_password" type="password" placeholder="Confirm password" class="form-control" required><br>
+            <input name="password" type="password" id="password" placeholder="Choose an 8 digit password" class="form-control" required><br>
+            <p id="warn" class="text-danger"></p>
+            <input name="c_password" type="password" placeholder="Confirm password" class="form-control" id="confirm" required onblur="confirmation()"><br>
             <input name="firstName" type="text" placeholder="First name" class="form-control" required><br>
             <input name="lastName" type="text" placeholder="Last name" class="form-control" required><br>
             <input name="email" type="email" placeholder="Email" class="form-control" required><br>
