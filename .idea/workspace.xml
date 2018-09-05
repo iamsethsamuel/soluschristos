@@ -2,18 +2,45 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="d8f91242-ccb7-4b60-9089-c67ebe0f9af1" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/migrations/0001_initial.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/migrations/0002_auto_20180901_1916.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/migrations/0003_auto_20180901_2042.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/172.31.37.152" beforeDir="false" afterPath="$PROJECT_DIR$/172.31.37.152" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/172.31.37.152/solus/home/static/javascript.js" beforeDir="false" afterPath="$PROJECT_DIR$/172.31.37.152/solus/home/static/javascript.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/172.31.37.152/solus/home/static/main.css" beforeDir="false" afterPath="$PROJECT_DIR$/172.31.37.152/solus/home/static/main.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/172.31.37.152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/solus/home/static/javascript.js" beforeDir="false" afterPath="$PROJECT_DIR$/172.31.37.152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/solus/home/static/javascript.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/javascript.js" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/javascript.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/main.css" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/main.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/main.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/javascript.js" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/static/javascript.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/shaka-player" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/AboutYou.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/AboutYou.mpd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/Logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/Screenshot_from_2018-07-15_00-50-57.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/VID20170521WA0002.mpd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/VID20171215WA0003.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/VID20171215WA0003.mpd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/audioAboutYou.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/audioVID20170521WA0002.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/audioVID20171215WA0003.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/audiohello.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/hello.mpd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shaka144AboutYou.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shaka144VID20170521WA0002.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shaka144VID20171215WA0003.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shaka144hello.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shakaAboutYou.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shakaVID20170521WA0002.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shakaVID20171215WA0003.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/static/uploads/uploads/shakahello.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/svgs/comment.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/svgs/darklove.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/svgs/love.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/solus/home/svgs/report.svg" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/templates/home/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/templates/home/profiles.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/profiles.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/templates/home/searchajax.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/searchajax.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/templates/home/userdetails.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/userdetails.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/solus/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/solus/solus/settings.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -25,36 +52,45 @@
     <session id="-1534111850">
       <usages-collector id="statistics.lifecycle.project">
         <counts>
-          <entry key="project.closed" value="5" />
+          <entry key="project.closed" value="9" />
           <entry key="project.open.time.1" value="2" />
-          <entry key="project.open.time.13" value="1" />
+          <entry key="project.open.time.11" value="1" />
+          <entry key="project.open.time.13" value="2" />
           <entry key="project.open.time.14" value="2" />
-          <entry key="project.open.time.15" value="1" />
+          <entry key="project.open.time.15" value="2" />
+          <entry key="project.open.time.16" value="2" />
           <entry key="project.open.time.2" value="1" />
-          <entry key="project.opened" value="7" />
+          <entry key="project.open.time.20" value="1" />
+          <entry key="project.opened" value="13" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
           <entry key="admin" value="21" />
-          <entry key="py" value="3316" />
+          <entry key="html" value="142" />
+          <entry key="py" value="5614" />
           <entry key="txt" value="66" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
+          <entry key="HTML" value="142" />
           <entry key="PLAIN_TEXT" value="66" />
-          <entry key="Python" value="3337" />
+          <entry key="Python" value="5635" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.open">
         <counts>
           <entry key="admin" value="1" />
+          <entry key="html" value="3" />
+          <entry key="js" value="1" />
           <entry key="py" value="10" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.open">
         <counts>
+          <entry key="HTML" value="3" />
+          <entry key="JavaScript" value="1" />
           <entry key="Python" value="11" />
         </counts>
       </usages-collector>
@@ -62,17 +98,34 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/solus/home/views.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="225">
-              <caret line="19" column="46" selection-start-line="19" selection-start-column="46" selection-end-line="19" selection-end-column="46" />
+            <state relative-caret-position="246">
+              <caret line="285" column="66" selection-start-line="285" selection-start-column="66" selection-end-line="285" selection-end-column="66" />
               <folding>
                 <element signature="e#0#45#0" expanded="true" />
-                <marker date="1535853781107" expanded="true" signature="5470:5472" ph="..." />
-                <marker date="1535853781107" expanded="true" signature="9669:10576" ph="..." />
-                <marker date="1535853781107" expanded="true" signature="9748:9757" ph="..." />
-                <marker date="1535853781107" expanded="true" signature="9962:10428" ph="..." />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/solus/home/javascript.js">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="312">
+              <caret line="276" column="42" lean-forward="true" selection-start-line="276" selection-start-column="42" selection-end-line="276" selection-end-column="42" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/solus/home/templates/home/posts_list.html">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="1035">
+              <caret line="72" selection-start-line="65" selection-start-column="22" selection-end-line="72" />
+              <folding>
+                <element signature="e#336#392#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -94,7 +147,7 @@
         <entry file="file://$PROJECT_DIR$/solus/home/urls.py">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="165">
-              <caret line="16" column="24" selection-start-line="16" selection-start-column="24" selection-end-line="16" selection-end-column="24" />
+              <caret line="16" column="26" selection-start-line="16" selection-start-column="26" selection-end-line="16" selection-end-column="26" />
               <folding>
                 <element signature="e#0#32#0" expanded="true" />
               </folding>
@@ -105,8 +158,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/solus/solus/settings.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="338">
-              <caret line="129" column="23" lean-forward="true" selection-start-line="129" selection-start-column="23" selection-end-line="129" selection-end-column="23" />
+            <state relative-caret-position="1935">
+              <caret line="129" column="23" selection-start-line="129" selection-start-column="23" selection-end-line="129" selection-end-column="23" />
             </state>
           </provider>
         </entry>
@@ -139,13 +192,15 @@
       <list>
         <option value="$PROJECT_DIR$/solus/jinja2.py" />
         <option value="$PROJECT_DIR$/solus/admin" />
-        <option value="$PROJECT_DIR$/solus/home/urls.py" />
         <option value="$PROJECT_DIR$/db.py" />
         <option value="$PROJECT_DIR$/solus/home/forms.py" />
         <option value="$PROJECT_DIR$/solus/home/admin.py" />
         <option value="$PROJECT_DIR$/solus/home/models.py" />
         <option value="$PROJECT_DIR$/solus/solus/settings.py" />
+        <option value="$PROJECT_DIR$/solus/home/urls.py" />
+        <option value="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" />
         <option value="$PROJECT_DIR$/solus/home/views.py" />
+        <option value="$PROJECT_DIR$/solus/home/javascript.js" />
       </list>
     </option>
   </component>
@@ -160,6 +215,7 @@
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
+      <pane id="Scope" />
       <pane id="ProjectPane">
         <subPane>
           <expand>
@@ -189,13 +245,19 @@
               <item name="soluschristos" type="b2602c69:ProjectViewProjectNode" />
               <item name="soluschristos" type="462c0819:PsiDirectoryNode" />
               <item name="solus" type="462c0819:PsiDirectoryNode" />
+              <item name="home" type="462c0819:PsiDirectoryNode" />
+              <item name="templates" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="soluschristos" type="b2602c69:ProjectViewProjectNode" />
+              <item name="soluschristos" type="462c0819:PsiDirectoryNode" />
+              <item name="solus" type="462c0819:PsiDirectoryNode" />
               <item name="templates" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
         </subPane>
       </pane>
-      <pane id="Scope" />
     </panes>
   </component>
   <component name="PropertiesComponent">
@@ -287,9 +349,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="15">
           <caret line="7" lean-forward="true" selection-start-line="7" selection-end-line="7" />
-          <folding>
-            <element signature="e#0#24#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -307,6 +366,26 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/solus/home/views.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="246">
+          <caret line="285" column="66" selection-start-line="285" selection-start-column="66" selection-end-line="285" selection-end-column="66" />
+          <folding>
+            <element signature="e#0#45#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/solus/home/templates/home/posts_list.html">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1035">
+          <caret line="72" selection-start-line="65" selection-start-column="22" selection-end-line="72" />
+          <folding>
+            <element signature="e#336#392#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/solus/home/admin.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="240">
@@ -320,10 +399,17 @@
     <entry file="file://$PROJECT_DIR$/solus/home/urls.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="165">
-          <caret line="16" column="24" selection-start-line="16" selection-start-column="24" selection-end-line="16" selection-end-column="24" />
+          <caret line="16" column="26" selection-start-line="16" selection-start-column="26" selection-end-line="16" selection-end-column="26" />
           <folding>
             <element signature="e#0#32#0" expanded="true" />
           </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/solus/solus/settings.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1935">
+          <caret line="129" column="23" selection-start-line="129" selection-start-column="23" selection-end-line="129" selection-end-column="23" />
         </state>
       </provider>
     </entry>
@@ -337,24 +423,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/solus/solus/settings.py">
+    <entry file="file://$PROJECT_DIR$/solus/home/javascript.js">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="338">
-          <caret line="129" column="23" lean-forward="true" selection-start-line="129" selection-start-column="23" selection-end-line="129" selection-end-column="23" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/solus/home/views.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="225">
-          <caret line="19" column="46" selection-start-line="19" selection-start-column="46" selection-end-line="19" selection-end-column="46" />
-          <folding>
-            <element signature="e#0#45#0" expanded="true" />
-            <marker date="1535853781107" expanded="true" signature="5470:5472" ph="..." />
-            <marker date="1535853781107" expanded="true" signature="9669:10576" ph="..." />
-            <marker date="1535853781107" expanded="true" signature="9748:9757" ph="..." />
-            <marker date="1535853781107" expanded="true" signature="9962:10428" ph="..." />
-          </folding>
+        <state relative-caret-position="312">
+          <caret line="276" column="42" lean-forward="true" selection-start-line="276" selection-start-column="42" selection-end-line="276" selection-end-column="42" />
         </state>
       </provider>
     </entry>

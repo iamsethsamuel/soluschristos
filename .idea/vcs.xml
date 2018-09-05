@@ -8,5 +8,7 @@
     <mapping directory="$PROJECT_DIR$/172.31.37.152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/172.31.37.152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/172.31.37.152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152/ubuntu@ip-172-31-37-152" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/solus/home/static/shaka-player" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/solus/soluschristos" vcs="Git" />
   </component>
 </project>
