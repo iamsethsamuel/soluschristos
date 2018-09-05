@@ -6,13 +6,15 @@
     <link rel="icon" type="image/png" href="/media/uploads/Logo.png" sizes="60x100">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{% block title %} Solus Christos {% endblock %}</title>
-    <!-- <link href="https://unpkg.com/ionicons@4.2.0/dist/css/ionicons.min.css" rel="stylesheet"> -->
+    <link href="https://unpkg.com/ionicons@4.2.0/dist/css/ionicons.min.css" rel="stylesheet">
     <!-- <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous"> -->
     <script src="{% static 'js.cookie.js' %}"></script>
     <link rel="stylesheet" href="{% static '/css/bootstrap.css' %}">
     <link href="https://fonts.googleapis.com/css?family=Courgette|Lobster" rel="stylesheet">
     <script src="{% static 'shaka-player/dist/shaka-player.compiled.js' %}"></script>
     <script src="{% static 'javascript.js' %}"></script>
+    <script src="https://unpkg.com/ionicons@4.4.2/dist/ionicons.js"></script>
+
     <link rel="stylesheet" href="{% static 'main.css' %}">
 </head>
 <body>
@@ -22,14 +24,20 @@
     <form method="post" action="{% url 'home:search' %}" class="form-inline" id="searchForm">
         {% csrf_token %}
         <input type="text" placeholder="Ask me" name="search" class="form-control navbar-item" id="search" >
-        <input type="submit" value="Search" class="btn btn-outline-secondary navbar-item">  
+        <input type="submit" value="Search" class="btn btn-outline-dark  navbar-item" >  
     </form>
-    <p class="bavbar-item" onclick="showNotifications()">
+    <div class="navbar-item" onclick="showNotifications()">
             {% if user.is_authenticated %}
-                <span id="n_indicator" class="badge badge-pill navbar-item" style="font-size:15px">Notifications 
-                    <sup id="notification_length" class="badge badge-danger badge-pill"> </sup></span>
-            {% endif %}     
-        </p>
+                <div  class="navbar-item" style="font-size:15px; color:white;">
+                    <div style="color:white; margin:0px 0px 0px 0px;">
+                        <ion-icon name="notifications-outline" color="white" size="large" ></ion-icon>  
+                    
+                        <span id="notification_length" style="position:relative; bottom:24px; right:12px"  class="badge badge-danger badge-pill"> </span>
+                    </div>
+                
+                </div>
+            {% endif %}  
+        </div>   
     <button id="showSearch" onclick="showSearch()" class="btn btn-secondary">Search</button>
                 <a href="{% url 'home:profile' user.id %}" class="post text-primary">{% if user.is_authenticated %}
                     <img src="{{user.users.dp.url}}" width="30px" class="navbar-item " height="30px">

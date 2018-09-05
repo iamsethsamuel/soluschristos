@@ -315,3 +315,8 @@ function confirmation(){
     document.querySelector("#warn").innerText = ""
     }  
 }
+// setInterval(()=>{
+//     let e = document.querySelector("#ro").style.transform
+//     console.log(e);
+// },1000) 
+

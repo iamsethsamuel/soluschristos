@@ -173,7 +173,6 @@ function addPic(){
  
 function textAreaFunc(){
     if(! document.getElementById("postFormSubmit")){
-        let content = document.getElementById("postContent")
         let postForm = document.getElementById("postForm")
         let newElement = document.createElement("input")
         let p = document.createElement("p")
@@ -212,6 +211,8 @@ function reportFunc(post){
     })
     
 }
+console.log(true);
+
 function likeFunc(id){
     let likeAjax = new XMLHttpRequest
     likeAjax.open("POST","createlike" ,true)
@@ -238,10 +239,6 @@ function unLikeFunc(id){
     unLikeAjax.addEventListener("load",()=>{
         postFunc(id)
     })
-}
-
-function submit(){
-    console.log("Submitted");
 }
 
 function commentFunc(event,id){
@@ -316,3 +313,4 @@ function confirmation(){
     document.querySelector("#warn").innerText = ""
     }  
 }
+console.log(true);

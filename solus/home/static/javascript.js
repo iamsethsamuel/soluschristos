@@ -262,30 +262,30 @@ function pinfo(post, elementAjax){
     let liketd = document.createElement("td")
     let reportTd = document.createElement("td")
     let ajaxTd = document.createElement("td")
-    let like = document.createElement("button")
-    let report = document.createElement("button")
+    let like = document.createElement("div")
+    let report = document.createElement("div")
     let p = document.createElement("p")
     let tr = document.createElement("tr")
     ajaxTd.setAttribute("class", "postComments postCommentsContainer")
     reportTd.setAttribute("class","float-right")
     reportTd.setAttribute("style", "margin-right:1% width:100%")
     liketd.setAttribute("width", "34%")
-    like.setAttribute("class","btn btn-primary like")
+    like.setAttribute("class","like")
     report.setAttribute("class", "btn btn-primary report")
     report.setAttribute("onclick", "reportFunc(post)".replace("post",post))
     table.setAttribute("class","container-fluid")
     report.setAttribute("class", "report")
     if(elementAjax.endsWith("True")){
-        like.innerText="Unlike"
+        like.innerHTML = '<ion-icon name="thumbs-down" size="large"></ion-icon>'
     }else{
-        like.innerText = "Like"
+        like.innerHTML = '<ion-icon name="thumbs-up" size="large"></ion-icon>'
     }
-    if(like.innerText=="Unlike"){
+    if(like.innerHTML == '<ion-icon name="thumbs-down" size="large"></ion-icon> <p>unLike</p>'){
         like.setAttribute("onclick", "unLikeFunc(post)".replace("post",post))
     }else{
         like.setAttribute("onclick", "likeFunc(post)".replace("post",post))
     }
-    report.innerText = "Report"
+    report.innerHTML='<ion-icon name="remove-circle" size="large"></ion-icon>'
     ajaxTd.innerText = elementAjax.replace("True","").replace("False","")
     reportTd.appendChild(report)
     liketd.appendChild(like)
@@ -326,11 +326,7 @@ function initPlayer(vid,vurl,id){
     video.addEventListener("canplay",()=>{
         video.play()
     })
-    {
-        // let vposter = vurl.replace("mpd","jpg")
-        
-        // video.poster = vposter
-    }
+    
     window.player = player
     player.addEventListener("error", onErrorEvent)
     player.configure({
@@ -341,16 +337,11 @@ function initPlayer(vid,vurl,id){
     })
    
     video.addEventListener("loadstart",()=>{
-        playButton.innerText="Loading";
-    })
-    video.addEventListener("playing",()=>{
-        playButton.innerText="Pause"
-    })
-    video.addEventListener("pause",()=>{
-        playButton.innerText="Play"
-    })
+        playButton.innerHTML='<ion-icon name="cog" size="large"></ion-icon>'
+
+    }) 
     video.addEventListener("loadeddata", ()=>{
-        playButton.innerText="Play"
+        playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>'
     })
     video.addEventListener("dblclick",()=>{ 
         if(navigator.userAgent.search("Firefox")!=-1){
@@ -359,37 +350,40 @@ function initPlayer(vid,vurl,id){
             video.webkitRequestFullScreen()
         }
     })
-    video.addEventListener("click",()=>{
-        if(playButton.innerText=="Play"){
-            playButton.innerHTML="Pause"
-            video.pause()
-        }else if(playButton.innerText=="Pause"){
-            video.play()
-            playButton.innerText="Play"
-        }       
-    })
     video.onplaying=()=>{  
         setInterval(()=>{
-            seek.innerText = video.currentTime.toFixed(0)+"/"+video.duration.toFixed(0)
+            video.duration > 59 ?
+            seek.innerText = String(((video.currentTime)/59).toFixed(1))[0]+":"+video.currentTime.toFixed(0)%59
+            +"/"+String(((video.duration)/59).toFixed(1))[0]+":"+String((video.duration%60).toFixed(1))[0]: 
+            seek.innerText="0:"+video.currentTime.toFixed(0)+"/"+"0:"+video.duration.toFixed(0)
+
             if(video.currentTime===video.duration){
-                playButton.innerText = "Play";
+                playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>';
             }
+            
+            
         },1000)
+        playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
+        playButton.onclick=()=>{ 
+            if(playButton.innerHTML==('<ion-icon name="pause" size="large" role="img" class="icon-large hydrated" aria-label="pause"></ion-icon>')){
+                
+                video.pause()
+                playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>'
+            }else{
+                video.play()
+                playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
+            }
+            }
     }
     player.load(vurl).then(() =>{
     }).catch(onErorr)
 }
 function playButton(vid,vurl){
     let video =document.getElementById("vid"+vid)
-    let playBtn = document.getElementById("playButton"+vid)
     if(video.played.length < 1){
         initPlayer("vid"+vid,vurl,vid)
     }
-    if(playBtn.innerText==="Pause"){
-        video.play()
-    }else if(playBtn.innerText==="Play"){
-        video.pause()
-    }
+   
 }
 
 function onErrorEvent(error){

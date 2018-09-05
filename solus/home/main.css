@@ -136,7 +136,9 @@ color: white
     }
 
 }
-
+.report{
+    color:red;
+}
 @media (max-width: 400px){
      #searchForm{
          display: none;

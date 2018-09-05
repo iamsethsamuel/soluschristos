@@ -235,7 +235,7 @@ def createLike(request):
         post = Posts.objects.get(id=formPost)
         Like.objects.create(post=post, user=request.user)
         Notifications.objects.create(item="{} has liked your post".format(str(request.user).title()),
-                                     user=request.user, notified_user=post.creator)
+                                     user=request.user, notified_user=post.creator,post=post)
         return HttpResponse("Success")
     else:
         return redirect("/")
@@ -246,8 +246,8 @@ def unLike(request):
         formPost = request.POST["post"]
         post = Posts.objects.get(id=formPost)
         Like.objects.get(post=post, user=request.user).delete()
-        Notifications.objects.get(item="{} has liked liked your post".format(str(request.user).title()),
-                                  user=request.user, notified_user=post.creator).delete()
+        Notifications.objects.get(item="{} has liked your post".format(str(request.user).title()),
+                                  user=request.user, notified_user=post.creator, post=post).delete()
         return HttpResponse("Sucess")
     else:
         return redirect("/")
@@ -697,7 +697,7 @@ def postInfo(request, post):
         res = True
     except Like.DoesNotExist:
         res = False
-    return HttpResponse("{} {} Comments {}".format(likes, comments, res))
+    return HttpResponse('{} {} Comments {}'.format(likes, comments, res))
 
 
 def profilePic(request,id):

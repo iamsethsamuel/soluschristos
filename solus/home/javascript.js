@@ -35,7 +35,6 @@ function commentFunc(post,post_content){
 }
 
 function morecomment(page){
-    let comment_div = document.getElementById("comment_div")
     let morecommentsAjax = new XMLHttpRequest
     morecommentsAjax.open("GET", page,true)
     morecommentsAjax.responseType = "document"
@@ -255,6 +254,7 @@ function showSearch(){
         searchButton.innerText = "Hide"
     }
 }
+log
 function pinfo(post, elementAjax){
     let info = document.getElementById("info"+post)
     let newElement = document.createElement("div")
@@ -271,7 +271,7 @@ function pinfo(post, elementAjax){
     reportTd.setAttribute("style", "margin-right:1% width:100%")
     liketd.setAttribute("width", "34%")
     like.setAttribute("class","btn btn-primary like")
-    report.setAttribute("class", "btn btn-primary report")
+    report.setAttribute("class", "btn btn-danger report")
     report.setAttribute("onclick", "reportFunc(post)".replace("post",post))
     table.setAttribute("class","container-fluid")
     report.setAttribute("class", "report")
@@ -307,6 +307,7 @@ function postFunc(post){
         pinfo(post,postInfoAjax.responseXML.body.innerText)    
     })
 }
+
 function initApp(){
     shaka.polyfill.installAll()
     if(shaka.Player.isBrowserSupported()){

@@ -3,20 +3,23 @@
 {% load static %}
 {% block main %}
 {% if posts.has_next %}
-    <button style="display:none" id="moreposts1">{{posts.next_page_number}} </button>
+    <button style="display:none; background-color:black" id="moreposts1">{{posts.next_page_number}} </button>
 {% endif %}
 {% if user.is_authenticated %}
 <div>
-    <button onclick="createPost()" class="badge badge-info badge-pill" style="margin-bottom:1%; margin-top:1%; font-size:18px;">
-        <span class="badge badge-info badge-pill">&plus;</span> Create Post</button>
+    <button onclick="createPost()" class="badge badge-pill" id="createpost">
+        <span class="badge  badge-pill"><ion-icon name="add" size="medium"></ion-icon></span> Create Post </button>
 </div>
+{% comment %} <div style="width:70px">
+   <p id="ro">Rotate</p> 
+</div> {% endcomment %}
 
 {%for p in posts%}
-<div class="container post_container">
+<div class="container post_container" >
     <div class="row">
-        <div class="container postsContainer">
+        <div class="container postsContainer" >
         <div class="col-sm-7">
-            <div class="card text-secondary" id ="postBody">
+            <div class="card text-secondary" id ="postBody" style="box-shadow:rgb(216, 214, 214)  3px 6px">
                 <div class="card-header">
                     <div class="float-right bg-white">
                         <p class="menu " id="menu{{p.id}}" onclick="menu('{{p.id}}')"><b>...</b></p>
@@ -46,10 +49,13 @@
                 </div>
                 <div class="card-body slider mediaContainer" id="mediaContainer{{p.id}}">
                     <p class="float-right indicator" style="display:none" id="indicator{{p.id}}">0</p>
-                    <p class="btn btn-default prev float-left" style="display:none" id="prev{{p.id}}" onclick="prevSlider('{{p.id}}','{{p.pic.url}}','{{p.pic1.url}}','{{p.pic2.url}}','{{p.pic3.url}}','{{p.pic4.url}}','{{p.pic5.url}}','{{p.pic6.url}}','{{p.pic7.url}}','{{p.pic8.url}}','{{p.pic9.url}}')"> < </p>
+                    <p class="badge badge-pill prev float-left" style="display:none; " id="prev{{p.id}}" onclick="prevSlider('{{p.id}}','{{p.pic.url}}','{{p.pic1.url}}','{{p.pic2.url}}','{{p.pic3.url}}','{{p.pic4.url}}','{{p.pic5.url}}','{{p.pic6.url}}','{{p.pic7.url}}','{{p.pic8.url}}','{{p.pic9.url}}')"> 
+                            <ion-icon name="arrow-dropleft" size="large"></ion-icon>                 
+                    </p>
                     {% if p.pic != "None" and p.pic.url|last == "d" %}
                     <video  id="vid{{p.id}}" class="postPic card-img-bottom"></video>
-                        <button id="playButton{{p.id}}" class="playButton" onclick="playButton('{{p.id}}','{{p.pic.url}}')">Play</button>
+                        <p id="playButton{{p.id}}" class="playButton " onclick="playButton('{{p.id}}','{{p.pic.url}}')">
+                            <ion-icon name="play" size="large"></ion-icon></p>
                         <p id="seek{{p.id}}" class="seek"></p>
                         <script>
                             posterFunc('{{p.pic.url}}',"{{p.id}}")
@@ -58,7 +64,8 @@
                         <img src="{{p.pic.url}}" class="postPic card-img-bottom " id="pic{{p.id}}" onclick="detailFunc('{{p.id}}')">
                     {% endif %}
                     {% if p.pic1 != "None" %}
-                        <p class="btn btn-default float-right next" id="next{{p.id}}" onclick="nextSlider('{{p.id}}','{{p.pic.url}}','{{p.pic1.url}}','{{p.pic2.url}}','{{p.pic3.url}}','{{p.pic4.url}}','{{p.pic5.url}}','{{p.pic6.url}}','{{p.pic7.url}}','{{p.pic8.url}}','{{p.pic9.url}}')"> > </p>
+                        <p class="badge badge-pill float-right next" id="next{{p.id}}" onclick="nextSlider('{{p.id}}','{{p.pic.url}}','{{p.pic1.url}}','{{p.pic2.url}}','{{p.pic3.url}}','{{p.pic4.url}}','{{p.pic5.url}}','{{p.pic6.url}}','{{p.pic7.url}}','{{p.pic8.url}}','{{p.pic9.url}}')">
+                                <ion-icon name="arrow-dropright" size="large"></ion-icon> </p>
                     {% endif %}
                 </div>
                 
