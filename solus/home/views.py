@@ -443,17 +443,17 @@ def createPost(request):
             except:
                 pass
         elif pic:
-
-            os.chdir("home/static/uploads/uploads")
-            if pic.name.endswith("mp4") or pic.name.endswith("avi"):
-                ffmpeg(pic)
-                post = Posts.objects.create(creator=creator, content=content, pic="uploads/{}.mpd".format(pic.name))
-            else:
-                post = Posts.objects.create(creator=creator, content=content, pic=pic)
-            Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(request.user))
-            os.chdir("../../../..")
-
-            print(pic)
+            try:
+                os.chdir("home/static/uploads/uploads")
+                if pic.name.endswith("mp4") or pic.name.endswith("avi"):
+                    ffmpeg(pic)
+                    post = Posts.objects.create(creator=creator, content=content, pic="uploads/{}.mpd".format(pic.name))
+                else:
+                    post = Posts.objects.create(creator=creator, content=content, pic=pic)
+                Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(request.user))
+                os.chdir("../../../..")
+            except:
+                pass
         else:
             post = Posts.objects.create(creator=creator, content=content)
             Notifications.objects.create(user=request.user, post=post, item="{} has posted".format(str(request.user)

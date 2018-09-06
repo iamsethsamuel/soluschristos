@@ -331,14 +331,15 @@ function initPlayer(vid,vurl,id){
     player.addEventListener("error", onErrorEvent)
     player.configure({
         streaming:{
-            bufferingGoal:9,
-            rebufferingGoal:2
+            bufferingGoal:2000,
+            rebufferingGoal:1000
         }
     })
    
     video.addEventListener("loadstart",()=>{
         playButton.innerHTML='<ion-icon name="cog" size="large"></ion-icon>'
-
+        playButton.style.animation="slider 1.4s 0s infinite"
+        
     }) 
     video.addEventListener("loadeddata", ()=>{
         playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>'
@@ -359,10 +360,9 @@ function initPlayer(vid,vurl,id){
 
             if(video.currentTime===video.duration){
                 playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>';
-            }
-            
-            
+            }            
         },1000)
+        playButton.style.animation=""
         playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
         playButton.onclick=()=>{ 
             if(playButton.innerHTML==('<ion-icon name="pause" size="large" role="img" class="icon-large hydrated" aria-label="pause"></ion-icon>')){

@@ -46,11 +46,14 @@ color: white
     opacity: 0.4;
 }
 @keyframes slider{
-    0% {transform: rotateY(123deg)};
-    40% {opacity: 0.2;}
-    80% {opacity: .1;}
-    100% {opacity: 1;}
+    0% {transform: rotate(0deg)}
+    100% {transform: rotate(360deg)}
 }
+/* #ro{
+    animation-name: slider;
+    animation-duration: 2s;
+    animation-iteration-count: 20;
+} */
 .postsContainer{
     padding-bottom: 2%;
     padding-right: 0%;
@@ -198,7 +201,11 @@ color: white
     bottom: 50%;
     left: 50%;
     z-index: 1000;
-    color:black
+    color:black;
+    width: 28px;
+    height: 29px;
+    padding: 0px 0px ;
+
 }
 .seek{
     position: relative;
@@ -248,13 +255,7 @@ color: white
         border-radius: 10px;
     }
 }
-#ro{
-    transition: ro 1s
-}
-#ro{
-    color: green;
-   transform: rotate(90deg)
-}
+
 #createpost{
     margin-bottom:1%; 
     margin-top:1%; 

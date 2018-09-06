@@ -8,11 +8,11 @@
 {% if user.is_authenticated %}
 <div>
     <button onclick="createPost()" class="badge badge-pill" id="createpost">
-        <span class="badge  badge-pill"><ion-icon name="add" size="medium"></ion-icon></span> Create Post </button>
+        <span class="badge  badge-pill" style="color:white"><ion-icon name="add" size="medium"></ion-icon></span> Create Post </button>
 </div>
-{% comment %} <div style="width:70px">
-   <p id="ro">Rotate</p> 
-</div> {% endcomment %}
+ <div id="ro" style="width:70px">
+   <p >Rotate</p>
+</div> 
 
 {%for p in posts%}
 <div class="container post_container" >
@@ -54,8 +54,9 @@
                     </p>
                     {% if p.pic != "None" and p.pic.url|last == "d" %}
                     <video  id="vid{{p.id}}" class="postPic card-img-bottom"></video>
-                        <p id="playButton{{p.id}}" class="playButton " onclick="playButton('{{p.id}}','{{p.pic.url}}')">
-                            <ion-icon name="play" size="large"></ion-icon></p>
+                        <div id="playButton{{p.id}}" class="playButton " onclick="playButton('{{p.id}}','{{p.pic.url}}')">
+                            <ion-icon name="play" size="large"></ion-icon></div>
+                        </div>
                         <p id="seek{{p.id}}" class="seek"></p>
                         <script>
                             posterFunc('{{p.pic.url}}',"{{p.id}}")
