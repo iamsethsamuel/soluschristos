@@ -356,12 +356,11 @@ function initPlayer(vid,vurl,id){
             video.duration > 59 ?
             seek.innerText = String(((video.currentTime)/59).toFixed(1))[0]+":"+video.currentTime.toFixed(0)%59
             +"/"+String(((video.duration)/59).toFixed(1))[0]+":"+String((video.duration%60).toFixed(1))[0]: 
-            seek.innerText="0:"+video.currentTime.toFixed(0)+"/"+"0:"+video.duration.toFixed(0)
-
-            if(video.currentTime===video.duration){
-                playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>';
-            }            
+            seek.innerText="0:"+video.currentTime.toFixed(0)+"/"+"0:"+video.duration.toFixed(0)             
         },1000)
+        if(video.currentTime===video.duration){
+            playButton.innerHTML = '<ion-icon name="play" size="large"></ion-icon>';
+        } 
         playButton.style.animation=""
         playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
         playButton.onclick=()=>{ 
