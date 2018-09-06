@@ -304,7 +304,8 @@ def createPost(request):
             os.remove("144{}.{}".format(file.name, fmt))
 
         def uploadFile(file):
-            if file.name.endswith("jpeg") or file.name.endswith("jpg") or file.name.endswith("png"):
+            if file.name.endswith("jpeg") or file.name.endswith("jpg") or file.name.endswith("png") or \
+                    file.name.endswith("PNG") or file.name.endswith("JPEG") or file.name.endswith("JPG"):
                 return file
             else:
                 return "uploads/{}.mpd".format(file.name)

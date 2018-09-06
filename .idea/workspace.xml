@@ -2,17 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="d8f91242-ccb7-4b60-9089-c67ebe0f9af1" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/javascript.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/js.cookie.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/main.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/static/javascript.js" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/static/javascript.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/static/main.css" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/static/main.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/static/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/static/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/home/static/try.html" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/solus/home/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/solus/home/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/solus/soluschristos" beforeDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -39,16 +31,16 @@
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
           <entry key="admin" value="21" />
-          <entry key="html" value="200" />
-          <entry key="py" value="5635" />
+          <entry key="html" value="201" />
+          <entry key="py" value="5649" />
           <entry key="txt" value="66" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="HTML" value="200" />
+          <entry key="HTML" value="201" />
           <entry key="PLAIN_TEXT" value="66" />
-          <entry key="Python" value="5656" />
+          <entry key="Python" value="5670" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.open">
@@ -70,11 +62,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/solus/home/views.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="321">
-              <caret line="458" column="9" selection-start-line="458" selection-start-column="9" selection-end-line="458" selection-end-column="9" />
+            <state relative-caret-position="195">
+              <caret line="307" column="75" selection-start-line="307" selection-start-column="75" selection-end-line="307" selection-end-column="75" />
               <folding>
                 <element signature="e#0#45#0" expanded="true" />
               </folding>
@@ -82,11 +74,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/solus/home/templates/home/posts_list.html">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="285">
-              <caret line="56" selection-start-line="56" selection-end-line="56" />
+            <state relative-caret-position="180">
+              <caret line="12" selection-start-line="12" selection-end-line="12" />
               <folding>
                 <element signature="e#406#425#0" expanded="true" />
               </folding>
@@ -162,8 +154,8 @@
         <option value="$PROJECT_DIR$/solus/solus/settings.py" />
         <option value="$PROJECT_DIR$/solus/home/urls.py" />
         <option value="$PROJECT_DIR$/solus/home/javascript.js" />
-        <option value="$PROJECT_DIR$/solus/home/views.py" />
         <option value="$PROJECT_DIR$/solus/home/templates/home/posts_list.html" />
+        <option value="$PROJECT_DIR$/solus/home/views.py" />
       </list>
     </option>
   </component>
@@ -373,22 +365,22 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/solus/home/views.py">
+    <entry file="file://$PROJECT_DIR$/solus/home/templates/home/posts_list.html">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="321">
-          <caret line="458" column="9" selection-start-line="458" selection-start-column="9" selection-end-line="458" selection-end-column="9" />
+        <state relative-caret-position="180">
+          <caret line="12" selection-start-line="12" selection-end-line="12" />
           <folding>
-            <element signature="e#0#45#0" expanded="true" />
+            <element signature="e#406#425#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/solus/home/templates/home/posts_list.html">
+    <entry file="file://$PROJECT_DIR$/solus/home/views.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="285">
-          <caret line="56" selection-start-line="56" selection-end-line="56" />
+        <state relative-caret-position="195">
+          <caret line="307" column="75" selection-start-line="307" selection-start-column="75" selection-end-line="307" selection-end-column="75" />
           <folding>
-            <element signature="e#406#425#0" expanded="true" />
+            <element signature="e#0#45#0" expanded="true" />
           </folding>
         </state>
       </provider>

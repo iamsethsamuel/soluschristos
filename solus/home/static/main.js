@@ -65,10 +65,10 @@ function formClose(){
 function addPic(){
     let postForm = document.getElementById("postForm")
     let p = document.createElement("p")
-    let add = document.getElementById("add")   
-    if(document.getElementById("pic9")){
+    let add = document.getElementById("add")
+    if(postForm.contains(document.querySelector("#pic9"))){
         add.style.display = "none"
-    }else if(document.getElementById("pic8")){
+    }else if(postForm.contains(document.querySelector("#pic8"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic9")
@@ -77,9 +77,8 @@ function addPic(){
         let pic9 = document.getElementById("pic9")
         postForm.insertBefore(p,pic9)
         postForm.insertBefore(p, add)
-
     }
-    else if(document.getElementById("pic7")){
+    else if(postForm.contains(document.querySelector("#pic7"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic8")
@@ -89,7 +88,7 @@ function addPic(){
         postForm.insertBefore(p,pic8)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic6")){
+    }else if(postForm.contains(document.querySelector("#pic6"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic7")
@@ -99,7 +98,7 @@ function addPic(){
         postForm.insertBefore(p,pic7)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic5")){
+    }else if(postForm.contains(document.querySelector("#pic5"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic6")
@@ -109,7 +108,7 @@ function addPic(){
         postForm.insertBefore(p,pic6)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic4")){
+    }else if(postForm.contains(document.querySelector("#pic4"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic5")
@@ -119,7 +118,7 @@ function addPic(){
         postForm.insertBefore(p,pic5)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic3")){
+    }else if(postForm.contains(document.querySelector("#pic3"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic4")
@@ -129,7 +128,7 @@ function addPic(){
         postForm.insertBefore(p,pic4)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic2")){
+    }else if(postForm.contains(document.querySelector("#pic2"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic3")
@@ -139,7 +138,7 @@ function addPic(){
         postForm.insertBefore(p,pic3)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic1")){
+    }else if(postForm.contains(document.querySelector("#pic1"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic2")
@@ -149,7 +148,7 @@ function addPic(){
         postForm.insertBefore(p,pic2)
         postForm.insertBefore(p, add)
 
-    }else if(document.getElementById("pic")){
+    }else if(postForm.contains(document.querySelector("#pic"))){
         let newElement = document.createElement("input")
         newElement.setAttribute("type", "file")
         newElement.setAttribute("name","pic1")
@@ -165,39 +164,39 @@ function addPic(){
         newElement.setAttribute("id","pic")
         newElement.setAttribute("onchange","picFunc()")
         postForm.insertBefore(newElement, add)
-        postForm.insertBefore(p, add)
-
+        postForm.insertBefore(p, add)        
     }
- 
 }
  
 function textAreaFunc(){
-    if(! document.getElementById("postFormSubmit")){
+    let postForm = document.getElementById("postForm")
+    if(!postForm.contains(document.querySelector("#post"))){
         let postForm = document.getElementById("postForm")
         let newElement = document.createElement("input")
         let p = document.createElement("p")
         newElement.setAttribute("type","submit")
         newElement.setAttribute("value","Post")
-        newElement.setAttribute("class","btn btn-default")
-        newElement.setAttribute("id","postFormSubmit")
+        newElement.setAttribute("class","btn btn-primary")
+        newElement.setAttribute("id","post")
         postForm.appendChild(newElement)
-        let submit = document.getElementById("postFormSubmit")
+        let submit = document.getElementById("post")
         postForm.insertBefore(p,submit)
     }   
-    
 }
 
 function picFunc(){
-    let newElement = document.createElement("input")
     let postForm = document.getElementById("postForm")
-    let p = document.createElement("p")
-    newElement.setAttribute("type","submit")
-    newElement.setAttribute("class","btn btn-primary")
-    newElement.setAttribute("value","Post")
-    newElement.setAttribute("id","post")
-    postForm.appendChild(newElement)
-    let post = document.getElementById("post")
-    postForm.insertBefore(p,post)
+    if(!postForm.contains(document.querySelector("#post"))){
+        let newElement = document.createElement("input")
+        let p = document.createElement("p")
+        newElement.setAttribute("id","post")
+        newElement.setAttribute("type","submit")
+        newElement.setAttribute("class","btn btn-primary")
+        newElement.setAttribute("value","Post")
+        postForm.appendChild(newElement)
+        let post = document.getElementById("post")
+        postForm.insertBefore(p,post)
+    }
 }
 
 function reportFunc(post){
@@ -315,4 +314,3 @@ function confirmation(){
     document.querySelector("#warn").innerText = ""
     }  
 }
-document.querySelector("#ro").style.animation="slider 20 1.5s"
