@@ -12,6 +12,7 @@ def homepage(request):
             "subscribe", flat=True)]
         postList = []
         posts = []
+        import os
         suggested = suggested_users(request)
         for user in subSubscribedID:
             postList.append(Posts.objects.filter(creator=user).order_by("-date"))
@@ -29,7 +30,7 @@ def homepage(request):
         if request.is_ajax():
             return render(request, "home/postAjax.html", {"posts": post})
         else:
-            return render(request, "home/posts_list.html", {"posts": post,"suggested_users":suggested})
+            return render(request, "home/posts_list.html", {"posts": post,"suggested_users":suggested,"dir":os.getcwd()})
     else:
         return render(request, "home/welcome.html")
 

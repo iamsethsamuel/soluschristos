@@ -31,7 +31,7 @@ color: white
     bottom: 45%;
     float: left;
     background-color: gainsboro;
-    opacity: 0.5;
+    opacity: 0.4;
     z-index: 1000;
 }
 .prev:hover, .next:hover{
@@ -43,14 +43,17 @@ color: white
     background-color: gainsboro;
     right: 3.5%;
     float: right;
-    opacity: 0.5;
+    opacity: 0.4;
 }
 @keyframes slider{
-    0% {transform: rotateY(123deg)};
-    40% {opacity: 0.2;}
-    80% {opacity: .1;}
-    100% {opacity: 1;}
+    0% {transform: rotate(0deg)}
+    100% {transform: rotate(360deg)}
 }
+/* #ro{
+    animation-name: slider;
+    animation-duration: 2s;
+    animation-iteration-count: 20;
+} */
 .postsContainer{
     padding-bottom: 2%;
     padding-right: 0%;
@@ -68,9 +71,7 @@ color: white
     animation-name: slider;
     animation-duration: 3.2;
 }
-.love{
-    height: 50px;
-}
+
 
 .change{
     overflow: scroll;
@@ -136,9 +137,7 @@ color: white
     }
 
 }
-.report{
-    color:red;
-}
+
 @media (max-width: 400px){
      #searchForm{
          display: none;
@@ -185,6 +184,7 @@ color: white
     float: right;
     width: 99%;
     margin-left: 5%;
+    color:rgb(228, 47, 47)
 }
 .details{
     position: relative;
@@ -194,12 +194,18 @@ color: white
 .like{
     float: left;
     width: 80%;
+    color: rgb(36, 33, 33);
 }
 .playButton{
     position: relative;
     bottom: 50%;
     left: 50%;
     z-index: 1000;
+    color:black;
+    width: 28px;
+    height: 29px;
+    padding: 0px 0px ;
+
 }
 .seek{
     position: relative;
@@ -218,6 +224,7 @@ color: white
 .postCommentsContainer{
     width: 48%;
     margin-right:100%;
+
 }
 @media(max-width:500px){
     .detailDp{
@@ -247,4 +254,13 @@ color: white
         height: 50px;
         border-radius: 10px;
     }
+}
+
+#createpost{
+    margin-bottom:1%; 
+    margin-top:1%; 
+    background-color:rgb(41, 39, 39);
+    font-size:18px;
+    box-shadow: grey 0px 2px 21px 0px;
+    color: white
 }
