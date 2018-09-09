@@ -282,7 +282,7 @@ def createPost(request):
             file.name = re.sub("[\W]","",file.name,flags=re.S)
             file.name = file.name.replace(fmt,"")
             file.name = file.name.replace("\n","")
-            cmd = 'ffmpeg -t 10:0 -i "init{}.{}" -vf "scale=-2:720" -y -vf "scale=-2:240" "144{}.mp4" "{}.mp4"'\
+            cmd = 'ffmpeg -t 10:0 -i "init{}.{}" -vf "scale=-2:720" -y -vf "scale=-2:240" "240{}.mp4" "{}.mp4"'\
                 .format(file.name, fmt, file.name, file.name)
             picture = 'ffmpeg -t 2 -i init{}.{} -frames 1 -y {}.jpg'.format(file.name, fmt, file.name)
             shlex.quote(cmd)
@@ -294,7 +294,7 @@ def createPost(request):
             if ffm.stderr:
                 print("ffm error \n", ffm.stderr)
             shakaPackager = "packager in={}.mp4,stream=audio,output=audio{}.mp4 in={}.mp4,stream=video,output=shaka{}.mp4" \
-                            " in=144{}.mp4,stream=video,output=shaka144{}.mp4  --mpd_output {}.mpd".format(file.name,
+                            " in=240{}.mp4,stream=video,output=shaka240{}.mp4  --mpd_output {}.mpd".format(file.name,
                                     file.name, file.name, file.name,file.name,file.name, file.name)
             shaka = subprocess.run(shakaPackager, shell=True, stdout=pipe, stderr=pipe)
             subprocess.run(picture, shell=True)
@@ -302,7 +302,7 @@ def createPost(request):
                 print("shaka error \n",shaka.stderr)
             os.remove("init{}.{}".format(file.name,fmt))
             os.remove("{}.{}".format(file.name,fmt))
-            os.remove("144{}.{}".format(file.name, fmt))
+            os.remove("240{}.{}".format(file.name, fmt))
 
         def uploadFile(file):
             if file.name.endswith("jpeg") or file.name.endswith("jpg") or file.name.endswith("png") or \
@@ -516,7 +516,7 @@ def updatePost(request, id):
             file.name = re.sub("[\W]", "", file.name, flags=re.S)
             file.name = file.name.replace(fmt, "")
             file.name = file.name.replace("\n", "")
-            cmd = 'ffmpeg -t 10:0 -i "init{}.{}" -vf "scale=-2:720" -y -vf "scale=-2:240" "144{}.mp4" "{}.mp4"' \
+            cmd = 'ffmpeg -t 10:0 -i "init{}.{}" -vf "scale=-2:720" -y -vf "scale=-2:240" "240{}.mp4" "{}.mp4"' \
                 .format(file.name, fmt, file.name, file.name)
             shlex.quote(cmd)
             with open("init{}.{}".format(file.name, fmt), "wb") as f:
@@ -526,7 +526,7 @@ def updatePost(request, id):
             if ffm.stderr:
                 print("ffm error \n")
             shakaPackager = "packager in={}.mp4,stream=audio,output=audio{}.mp4 in={}.mp4,stream=video,output=shaka{}.mp4" \
-                            " in=144{}.mp4,stream=video,output=shaka144{}.mp4  --mpd_output {}.mpd".format(
+                            " in=240{}.mp4,stream=video,output=shaka240{}.mp4  --mpd_output {}.mpd".format(
                 file.name,
                 file.name, file.name, file.name, file.name, file.name, file.name)
             shaka = subprocess.run(shakaPackager, shell=True, stdout=pipe, stderr=pipe)
@@ -535,7 +535,7 @@ def updatePost(request, id):
                 print("shaka error \n")
             os.remove("init{}.{}".format(file.name, fmt))
             os.remove("{}.{}".format(file.name, fmt))
-            os.remove("144{}.{}".format(file.name, fmt))
+            os.remove("240{}.{}".format(file.name, fmt))
 
         def uploadFile(file):
             if file.name.endswith("jpeg") or file.name.endswith("jpg") or file.name.endswith("png"):
