@@ -55,9 +55,10 @@ color: white
     animation-iteration-count: 20;
 } */
 .postsContainer{
-    padding-bottom: 2%;
+    margin-top: 2%;
     padding-right: 0%;
     padding-left: 0%;
+    border-radius: 9px
 }
 .indicator{
     color: rgb(163, 145, 145);  
@@ -71,7 +72,6 @@ color: white
     animation-name: slider;
     animation-duration: 3.2;
 }
-
 
 .change{
     overflow: scroll;

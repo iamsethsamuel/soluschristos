@@ -331,8 +331,8 @@ function initPlayer(vid,vurl,id){
     player.addEventListener("error", onErrorEvent)
     player.configure({
         streaming:{
-            bufferingGoal:2000,
-            rebufferingGoal:1000
+            bufferingGoal:10,
+            rebufferingGoal:5
         }
     })
    
@@ -372,7 +372,7 @@ function initPlayer(vid,vurl,id){
                 video.play()
                 playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
             }
-            }
+        }
     }
     player.load(vurl).then(() =>{
     }).catch(onErorr)

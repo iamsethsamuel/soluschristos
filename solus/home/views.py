@@ -19,7 +19,7 @@ def homepage(request):
         for post in postList:
             for p in post:
                 posts.append(p)
-        paginator = Paginator(posts, 4)
+        paginator = Paginator(posts, 1)
         p_page = request.GET.get("page")
         try:
             post = paginator.page(p_page)
@@ -305,8 +305,7 @@ def createPost(request):
             os.remove("240{}.{}".format(file.name, fmt))
 
         def uploadFile(file):
-            if file.name.endswith("jpeg") or file.name.endswith("jpg") or file.name.endswith("png") or \
-                    file.name.endswith("PNG") or file.name.endswith("JPEG") or file.name.endswith("JPG"):
+            if file.content_type.startswith("image") or file.content_type.startswith("audio"):
                 return file
             else:
                 return "uploads/{}.mpd".format(file.name)
@@ -316,7 +315,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic9, pic8, pic7, pic6, pic5, pic4, pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content,pic9=uploadFile(pic9), pic8=uploadFile(pic8),
@@ -333,7 +332,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic8, pic7, pic6, pic5, pic4, pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content,pic8=uploadFile(pic8), pic7=uploadFile(pic7),
@@ -350,7 +349,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic7, pic6 ,pic5, pic4, pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content, pic7=uploadFile(pic7),pic6=uploadFile(pic6),
@@ -365,7 +364,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic6, pic5, pic4, pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content,pic6=uploadFile(pic6), pic5=uploadFile(pic5),
@@ -380,7 +379,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic5, pic4, pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
                 post = Posts.objects.create(creator=creator, content=content, pic5=uploadFile(pic5),pic4=uploadFile(pic4),
                                     pic3=uploadFile(pic3), pic2=uploadFile(pic2), pic1=uploadFile(pic1),pic=uploadFile(pic))
@@ -407,7 +406,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic3, pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content,pic3=uploadFile(pic3), pic2=uploadFile(pic2),
@@ -422,7 +421,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic2, pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
 
                 post = Posts.objects.create(creator=creator, content=content, pic2=uploadFile(pic2), pic1=uploadFile(pic1),
@@ -437,7 +436,7 @@ def createPost(request):
                 os.chdir("home/static/uploads/uploads")
                 files = [pic1, pic]
                 for file in files:
-                    if file.name.endswith("mp4") or file.name.endswith("avi") or file.name.endswith("mkv"):
+                    if file.content_type.startswith("video"):
                         ffmpeg(file)
                 post = Posts.objects.create(creator=creator, content=content, pic1=uploadFile(pic1), pic=uploadFile(pic))
                 Notifications.objects.create(user=request.user, post=post,item="{} has posted".format(request.user))
@@ -447,7 +446,7 @@ def createPost(request):
         elif pic:
             try:
                 os.chdir("home/static/uploads/uploads")
-                if pic.name.endswith("mp4") or pic.name.endswith("avi"):
+                if pic.content_type.startswith("video"):
                     ffmpeg(pic)
                     post = Posts.objects.create(creator=creator, content=content, pic="uploads/{}.mpd".format(pic.name))
                 else:

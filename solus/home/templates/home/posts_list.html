@@ -2,21 +2,18 @@
 {% block title %} Posts {% endblock %}
 {% load static %}
 {% block main %}
-{% if posts.has_next %}
-    <button style="display:none; background-color:black" id="moreposts1">{{posts.next_page_number}} </button>
-{% endif %}
+
 {% if user.is_authenticated %}
 <div>
     <button onclick="createPost()" class="badge badge-pill" id="createpost">
         <span class="badge  badge-pill" style="color:white"><ion-icon name="add" size="medium"></ion-icon></span> Create Post </button>
 </div>
-
 {%for p in posts%}
 <div class="container post_container" >
     <div class="row">
-        <div class="container postsContainer" >
-        <div class="col-sm-7">
-            <div class="card text-secondary" id ="postBody" style="box-shadow:rgb(216, 214, 214)  3px 6px">
+        <div class="container " >
+        <div class="col-sm-7 postsContainer" style="box-shadow:rgb(216, 214, 214)  3px 6px">
+            <div class="card text-secondary" id ="postBody" >
                 <div class="card-header">
                     <div class="float-right bg-white">
                         <p class="menu " id="menu{{p.id}}" onclick="menu('{{p.id}}')"><b>...</b></p>
@@ -32,8 +29,8 @@
                         {% endif %}
                     </div>
                     <div class="row">
-                        <img src="{{p.creator.users.dp.url}}" class="float-left img-thumbnail" id="cardpic" style="width:20%"/>
-                        <a href="{% url 'home:profile' p.creator.username %}" class="col-md-3">
+                        <img src="{{p.creator.users.dp.url}}" class="float-left img-thumbnail" id="cardpic" style="width:20%" height="20%">
+                        <a href="{% url 'home:profile' p.creator.username %}" class="col-md-3"></a>
                         <p >{{ p.creator|title }} </p>
                         </a>
                         <span class="col-md-4">{% if p.date|timesince|first == "0" %} Just now {% else %}{{p.date|timesince}} ago{% endif %} </span>            
@@ -109,10 +106,13 @@
 {% endfor %}
 {% endfor %}
 </tr>
-
 </table>
 {% endif %}
 </div>
-
 {% endif %}
+{% if posts.has_next %}
+       <p id="nextPage" style="display:none">{{posts.next_page_number}}</p>
+{%else%}
+        <p id="nextPage" style="display:none">{{posts.last_page_number}}</p>
+{% endif %} 
 {% endblock %}

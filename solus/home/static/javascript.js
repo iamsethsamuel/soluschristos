@@ -45,7 +45,6 @@ function morecomment(page){
 function moreposts(page){
     const morepostsAjax = new XMLHttpRequest
     let post_container = document.getElementsByClassName("post_container")
-    let mainPageNumber = document.getElementById("moreposts1")
     morepostsAjax.open("GET", page,true)
     morepostsAjax.responseType = "document"
     morepostsAjax.setRequestHeader("X-Requested-With",'XMLHttpRequest')
@@ -56,7 +55,7 @@ function moreposts(page){
     })
     morepostsAjax.addEventListener("load",() => {
         post_container[0].innerHTML += morepostsAjax.responseXML.body.innerHTML
-        document.contains(mainPageNumber)? document.body.removeChild(mainPageNumber):null
+        post_container[0].removeChild(document.querySelector("#nextPage"))
     })
 }
 
@@ -372,7 +371,7 @@ function initPlayer(vid,vurl,id){
                 video.play()
                 playButton.innerHTML = '<ion-icon name="pause" size="large"></ion-icon>'
             }
-            }
+        }
     }
     player.load(vurl).then(() =>{
     }).catch(onErorr)
@@ -391,15 +390,7 @@ function onErrorEvent(error){
 function onErorr(error){
     console.error("Error code ", error.code, error)
 }
-window.addEventListener("scroll",()=>{
-    if(window.scrollY+window.innerHeight == document.body.scrollHeight){
-        let page1 = document.getElementById("moreposts1")
-        let page2 = document.getElementById("moreposts2")
-        document.body.contains(page1) ? moreposts("?page="+Number(page1.innerText)):
-        document.getElementById("morepost2")!=null?moreposts("?page="+Number(page2.innerText)):null
-     }
-    
-})
+
 
 function posterFunc(vUrl,vId){
     let video = document.getElementById("vid"+vId)
