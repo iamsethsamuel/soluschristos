@@ -11,7 +11,7 @@ urlpatterns = [
     path("", views.homepage, name="home"),
     path("signup/", views.signup, name="signup"),
     path("login/", auth_views.LoginView.as_view(template_name= "home/login.html"), name="login"),
-    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("logout/", auth_views.LogoutView.as_view(next_page="/login"), name="logout"),
     path("comment/<int:post_id>", views.comments, name="post-detail"),
     path("usr/<username>", views.profile, name="profile"),
     path("follow/<username>", views.createFollow, name="follow"),
@@ -32,6 +32,6 @@ urlpatterns = [
     path("notifications/", views.notification),
 
 ]
-if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns +=static(settings.MEDIA_URL, document_root= settings.MEDIA_ROOT)
+
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+urlpatterns +=static(settings.MEDIA_URL, document_root= settings.MEDIA_ROOT)
