@@ -17,9 +17,9 @@
     </tr>
 </table>
         {% if alreadyFollowing == user.username %}
-            <a href="{% url 'home:unfollow' profile.id %}">Unfollow</a>
+            <a href="{% url 'home:unfollow' profile.username %}">Unfollow</a>
         {% else %}
-            <a href="{% url 'home:follow' profile.id %}">Follow</a>
+            <a href="{% url 'home:follow' profile.username %}">Follow</a>
         {% endif %}
         <div class="card-body">
 

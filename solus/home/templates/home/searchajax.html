@@ -20,8 +20,10 @@
         {% endif %}
     {% for p in posts %}
     <p>
-        <span><img src="{{p.creator.users.dp.url}}" height="60px" width="60px"/></span>
-        <span>{{p.content}}</span>
+        <a href="{% url 'home:post-detail' p.id %}">
+            <span><img src="{{p.creator.users.dp.url}}" height="60px" width="60px"/></span>
+            <span>{{p.content}}</span>
+        </a>
     </p>
     {% endfor %}
     </div>

@@ -1,7 +1,7 @@
-const cook = Cookies.get('csrftoken')
+var cook = Cookies.get('csrftoken')
 function detailFunc(id){
-    let modal = document.getElementsByClassName("modal")
-    let detailAjax = new XMLHttpRequest 
+    var modal = document.getElementsByClassName("modal")
+    var detailAjax = new XMLHttpRequest 
     detailAjax.open("GET","post/"+id,true)
     detailAjax.setRequestHeader("HTTP_X_REQUESTED_WITH","XMLHttpRequest")
     detailAjax.responseType = "document"    
@@ -9,23 +9,23 @@ function detailFunc(id){
     detailAjax.addEventListener("load",()=>{
         modal[0].innerHTML = detailAjax.responseXML.body.innerHTML
         modal[0].style.display="block"
-        const close = document.getElementById("detailClose")
-            document.contains(close) ? close.addEventListener("click",() => {
+        var close = document.getElementById("detailClose")
+            document.contains(close) ? close.addEventListener("click",function(){
             modal[0].style.display = "none"}): null;
     })   
 }
 function commentFunc(post,post_content){
-    let post_id = document.getElementById(post_content)
-    let commentAjax = new XMLHttpRequest     
+    var post_id = document.getElementById(post_content)
+    var commentAjax = new XMLHttpRequest     
     commentAjax.open("POST", "createcomment",true)
     commentAjax.setRequestHeader('X-CSRFToken',cook)
     commentAjax.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
     commentAjax.responseType = "document"
     commentAjax.send("comment="+post_id.value+"&post="+post)
-    commentAjax.addEventListener("load",() => {
+    commentAjax.addEventListener("load",function(){
         post_id.value = ''
         change.innerHTML = "Comment posted"
-        setTimeout(() => {
+        setTimeout(function(){
             change.innerHTML = ""
         },2000)
     })
@@ -35,16 +35,16 @@ function commentFunc(post,post_content){
 }
 
 function morecomment(page){
-    let comment_div = document.getElementById("comment_div")
-    let morecommentsAjax = new XMLHttpRequest
+    var comment_div = document.getElementById("comment_div")
+    var morecommentsAjax = new XMLHttpRequest
     morecommentsAjax.open("GET", page,true)
     morecommentsAjax.responseType = "document"
     morecommentsAjax.send()
 }
 
 function moreposts(page){
-    const morepostsAjax = new XMLHttpRequest
-    let post_container = document.getElementsByClassName("post_container")
+    var morepostsAjax = new XMLHttpRequest
+    var post_container = document.getElementsByClassName("post_container")
     morepostsAjax.open("GET", page,true)
     morepostsAjax.responseType = "document"
     morepostsAjax.setRequestHeader("X-Requested-With",'XMLHttpRequest')
@@ -53,23 +53,23 @@ function moreposts(page){
     morepostsAjax.send()
     morepostsAjax.addEventListener("error",(err)=>{console.log(err);
     })
-    morepostsAjax.addEventListener("load",() => {
+    morepostsAjax.addEventListener("load",function(){
         post_container[0].innerHTML += morepostsAjax.responseXML.body.innerHTML
         post_container[0].removeChild(document.querySelector("#nextPage"))
     })
 }
 
 function nextSlider(id,pic, ...args){
-    let arr = [pic]
-    let postPic = document.getElementById("pic"+id) 
-    let prevButton = document.getElementById("prev"+id)
-    let nextButton = document.getElementById("next"+id)
-    let indicator = document.getElementById('indicator'+id)
-    let mediaContainer = document.getElementById("mediaContainer"+id)
-    let vid = document.createElement("video")
-    let img = document.createElement("img")
-    let playButton =document.createElement("button")
-    let seek = document.createElement("p")
+    var arr = [pic]
+    var postPic = document.getElementById("pic"+id) 
+    var prevButton = document.getElementById("prev"+id)
+    var nextButton = document.getElementById("next"+id)
+    var indicator = document.getElementById('indicator'+id)
+    var mediaContainer = document.getElementById("mediaContainer"+id)
+    var vid = document.createElement("video")
+    var img = document.createElement("img")
+    var playButton =document.createElement("button")
+    var seek = document.createElement("p")
     vid.setAttribute("id","vid"+id)
     vid.setAttribute("class","card-img-bottom")
     playButton.setAttribute("id","playButton"+id)
@@ -79,13 +79,13 @@ function nextSlider(id,pic, ...args){
     seek.setAttribute("class","seek")
     img.setAttribute("id","pic"+id)
     img.setAttribute("class", "card-img-bottom")
-    for(let i = 0; i < args.length;i++){
+    for(var i = 0; i < args.length;i++){
         if(args[i] !== "/media/None"){
             arr.push(args[i])
         }
     }
     if(mediaContainer.contains(postPic)){
-        let current = arr.indexOf(postPic.attributes.src.value)
+        var current = arr.indexOf(postPic.attributes.src.value)
         current < arr.length -1 ? current++ : current = arr.length -1
         if(arr[current].endsWith("mpd")){
             mediaContainer.replaceChild(vid,postPic)
@@ -102,8 +102,8 @@ function nextSlider(id,pic, ...args){
         current == 0 ? prevButton.style.display = "none":prevButton.style.display = "block"
         current == arr.length -1 ? nextButton.style.display = "none": nextButton.style.display = "block"   
     }else{
-        let currentSrc = arr[indicator.innerText[0]]
-        let current = arr.indexOf(currentSrc)
+        var currentSrc = arr[indicator.innerText[0]]
+        var current = arr.indexOf(currentSrc)
         console.log(indicator.innerText);
         if(arr[current].endsWith("mpd")){
             indicator.style.display = "block"
@@ -126,16 +126,16 @@ function nextSlider(id,pic, ...args){
 }
 
 function prevSlider(id,pic, ...args){
-    let arr = [pic]
-    let postPic = document.getElementById("pic"+id) 
-    let prevButton = document.getElementById("prev"+id)
-    let nextButton = document.getElementById("next"+id)
-    let indicator = document.getElementById('indicator'+id)
-    let mediaContainer = document.getElementById("mediaContainer"+id)
-    let vid = document.createElement("video")
-    let img = document.createElement("img")
-    let playButton =document.createElement("button")
-    let seek = document.createElement("p")
+    var arr = [pic]
+    var postPic = document.getElementById("pic"+id) 
+    var prevButton = document.getElementById("prev"+id)
+    var nextButton = document.getElementById("next"+id)
+    var indicator = document.getElementById('indicator'+id)
+    var mediaContainer = document.getElementById("mediaContainer"+id)
+    var vid = document.createElement("video")
+    var img = document.createElement("img")
+    var playButton =document.createElement("button")
+    var seek = document.createElement("p")
     vid.setAttribute("id","vid"+id)
     vid.setAttribute("class","card-img-bottom")
     playButton.setAttribute("id","playButton"+id)
@@ -145,14 +145,14 @@ function prevSlider(id,pic, ...args){
     seek.setAttribute("class","seek")
     img.setAttribute("id","pic"+id)
     img.setAttribute("class", "card-img-bottom")
-    for(let i = 0; i < args.length;i++){
+    for(var i = 0; i < args.length;i++){
         if(args[i] !== "/media/None"){
             arr.push(args[i])
         }
     }
     
     if(mediaContainer.contains(postPic)){
-        let current = arr.indexOf(postPic.attributes.src.value)
+        var current = arr.indexOf(postPic.attributes.src.value)
         current < arr.length -1 ? current-1 : null;
         if(arr[current-1].endsWith("mpd")){
             mediaContainer.replaceChild(vid,postPic)
@@ -175,8 +175,8 @@ function prevSlider(id,pic, ...args){
             prevButton.style.display="none"
             nextButton.style.display="block"}   
     }else{
-        let currentSrc = arr[indicator.innerText[0]]
-        let current = arr.indexOf(currentSrc)-1
+        var currentSrc = arr[indicator.innerText[0]]
+        var current = arr.indexOf(currentSrc)-1
         if(arr[current-1].endsWith("mpd")){
             indicator.style.display = "block"
             indicator.innerText = String(current)+"/"+String(arr.length)
@@ -202,13 +202,13 @@ function prevSlider(id,pic, ...args){
 }
 
 function profilePostsFunc(page) {
-    let profilePostAjax = new XMLHttpRequest
-    let profilePostContainer = document.getElementsByClassName("profilePostContainer")
+    var profilePostAjax = new XMLHttpRequest
+    var profilePostContainer = document.getElementsByClassName("profilePostContainer")
     profilePostAjax.open("GET", page, true)
     profilePostAjax.setRequestHeader("X-Requested-With",'XMLHttpRequest')
     profilePostAjax.responseType = "document"
     profilePostAjax.send()
-    profilePostAjax.addEventListener("load", () => {
+    profilePostAjax.addEventListener("load", function(){
         profilePostContainer[0].innerHTML = profilePostAjax.responseXML.body.innerHTML
     })
     profilePostAjax.addEventListener("error",(error) =>{
@@ -218,7 +218,7 @@ function profilePostsFunc(page) {
 }
 
 function menu(id){
-    let form = document.getElementById("form"+id)
+    var form = document.getElementById("form"+id)
     if(form.style.display == "none"){
         form.style.display = "block"
     }else{
@@ -227,25 +227,25 @@ function menu(id){
 }
 
 function getNotifications(){
-    let ajax = new XMLHttpRequest()
-    let notificationsContainer = document.getElementById("notificationDetails")
+    var ajax = new XMLHttpRequest()
+    var notificationsContainer = document.getElementById("notificationDetails")
     ajax.open("GET", "/notifications",true)
     ajax.responseType = "document"
     ajax.send()
-    ajax.addEventListener("load",()=> {
+    ajax.addEventListener("load",function(){
         notificationsContainer.innerHTML+=ajax.responseXML.body.innerHTML
         document.querySelector("#notification_length").innerHTML = document.querySelector("#length").innerHTML
     })
 }
 
 function createPost(){
-    let modal = document.getElementById("modal")
+    var modal = document.getElementById("modal")
     modal.style.display = "block"
 }
 
 function showSearch(){
-    let searchForm = document.getElementById("searchForm");
-    let searchButton = document.getElementById("showSearch");
+    var searchForm = document.getElementById("searchForm");
+    var searchButton = document.getElementById("showSearch");
     searchForm.style.display = "block"
     if(searchButton.innerText == "Hide"){
         searchForm.style.display = "none"
@@ -255,16 +255,16 @@ function showSearch(){
     }
 }
 function pinfo(post, elementAjax){
-    let info = document.getElementById("info"+post)
-    let newElement = document.createElement("div")
-    let table = document.createElement("table")
-    let liketd = document.createElement("td")
-    let reportTd = document.createElement("td")
-    let ajaxTd = document.createElement("td")
-    let like = document.createElement("div")
-    let report = document.createElement("div")
-    let p = document.createElement("p")
-    let tr = document.createElement("tr")
+    var info = document.getElementById("info"+post)
+    var newElement = document.createElement("div")
+    var table = document.createElement("table")
+    var liketd = document.createElement("td")
+    var reportTd = document.createElement("td")
+    var ajaxTd = document.createElement("td")
+    var like = document.createElement("div")
+    var report = document.createElement("div")
+    var p = document.createElement("p")
+    var tr = document.createElement("tr")
     ajaxTd.setAttribute("class", "postComments postCommentsContainer")
     reportTd.setAttribute("class","float-right")
     reportTd.setAttribute("style", "margin-right:1% width:100%")
@@ -298,11 +298,11 @@ function pinfo(post, elementAjax){
 }
 
 function postFunc(post){
-    let postInfoAjax = new XMLHttpRequest
+    var postInfoAjax = new XMLHttpRequest
     postInfoAjax.open("GET", "postinfo/"+post, true)
     postInfoAjax.responseType = "document"
     postInfoAjax.send()
-    postInfoAjax.addEventListener("load", () => {
+    postInfoAjax.addEventListener("load", function(){
         pinfo(post,postInfoAjax.responseXML.body.innerText)    
     })
 }
@@ -317,10 +317,10 @@ function initApp(){
 }
 
 function initPlayer(vid,vurl,id){
-    let video = document.getElementById(vid);
-    let player = new shaka.Player(video)
-    let seek = document.getElementById("seek"+id)
-    let playButton = document.getElementById("playButton"+id)
+    var video = document.getElementById(vid);
+    var player = new shaka.Player(video)
+    var seek = document.getElementById("seek"+id)
+    var playButton = document.getElementById("playButton"+id)
     video.setAttribute("src",vurl)
     video.addEventListener("canplay",()=>{
         video.play()
@@ -377,7 +377,7 @@ function initPlayer(vid,vurl,id){
     }).catch(onErorr)
 }
 function playButton(vid,vurl){
-    let video =document.getElementById("vid"+vid)
+    var video =document.getElementById("vid"+vid)
     if(video.played.length < 1){
         initPlayer("vid"+vid,vurl,vid)
     }
@@ -393,6 +393,6 @@ function onErorr(error){
 
 
 function posterFunc(vUrl,vId){
-    let video = document.getElementById("vid"+vId)
+    var video = document.getElementById("vid"+vId)
     video.setAttribute("poster",vUrl.replace("mpd","jpg"))
 }
