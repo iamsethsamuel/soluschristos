@@ -24,7 +24,6 @@ SECRET_KEY = '^7&)nc-c6if)3-pc&9zy9!$(!c4s-b7%vebmn&ib_vd-a7dj4^'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
-
 ALLOWED_HOSTS = ["52.231.153.185", "www.soluschristos.com", "localhost", "127.0.0.1"]
 
 
@@ -132,7 +131,7 @@ EMAIL_POST = 25
 # https://docs.djangoproject.com/en/2.0/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR,'home/static')
+STATIC_ROOT = os.path.join(BASE_DIR, 'home/static')
 #Done by me
 LOGIN_REDIRECT_URL = "/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "home/static/uploads")
