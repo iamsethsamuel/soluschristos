@@ -1,3 +1,4 @@
+console.log(true)
 const q = document.getElementById("search")
 const change = document.getElementById("change")
 const postBody = document.getElementById("postBody")

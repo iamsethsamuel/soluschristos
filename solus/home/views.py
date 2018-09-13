@@ -19,7 +19,7 @@ def homepage(request):
         for post in postList:
             for p in post:
                 posts.append(p)
-        paginator = Paginator(posts, 1)
+        paginator = Paginator(posts, 5)
         p_page = request.GET.get("page")
         try:
             post = paginator.page(p_page)
@@ -104,7 +104,7 @@ def search(request):
                 else:
                     return render(request, 'home/search.html', {'posts': post, 'prof': prof})
             else:
-                return render(request, 'home/searchajax.html', {"error":"No result found"})
+                return render(request, 'home/searchajax.html', {"error": "No result found"})
     else:
         return redirect('home:index')
 
